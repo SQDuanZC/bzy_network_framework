@@ -97,11 +97,11 @@ if (response.success) {
 
 ## 📖 文档
 
-- [快速开始指南](docs/QUICK_START_GUIDE.md)
-- [高级功能](docs/ADVANCED_FEATURES.md)
-- [API 文档](docs/API_REFERENCE.md)
-- [最佳实践](docs/BEST_PRACTICES.md)
-- [迁移指南](docs/MIGRATION_GUIDE.md)
+- [快速开始指南](doc/docs/QUICK_START_GUIDE.md)
+- [高级功能](doc/docs/ADVANCED_FEATURES.md)
+- [API 文档](doc/docs/API_REFERENCE.md)
+- [最佳实践](doc/ocs/BEST_PRACTICES.md)
+- [迁移指南](doc/docs/MIGRATION_GUIDE.md)
 
 ## 🏗️ 架构
 
