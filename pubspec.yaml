@@ -1,9 +1,9 @@
 name: bzy_network_framework
 description: BZY 统一网络请求框架 - 高性能、易扩展的 Flutter 网络解决方案
 version: 1.0.0
-homepage: https://github.com/your-org/bzy_network_framework
-repository: https://github.com/your-org/bzy_network_framework
-issue_tracker: https://github.com/your-org/bzy_network_framework/issues
+homepage: https://github.com/SQDuanZC/bzy_network_framework
+repository: https://github.com/SQDuanZC/bzy_network_framework
+issue_tracker: https://github.com/SQDuanZC/bzy_network_framework/issues
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -82,4 +82,4 @@ topics:
 #     path: screenshots/monitoring.png
 
 funding:
-  - https://github.com/sponsors/your-org
+  - https://github.com/sponsors/SQDuanZC
