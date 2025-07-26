@@ -53,7 +53,7 @@ class InterceptorManager {
     }
     
     if (kDebugMode) {
-      print('拦截器已注册: $name');
+      debugPrint('拦截器已注册: $name');
     }
   }
   
@@ -68,7 +68,7 @@ class InterceptorManager {
     _executionOrder.remove(name);
     
     if (kDebugMode) {
-      print('拦截器已注销: $name');
+      debugPrint('拦截器已注销: $name');
     }
     return true;
   }
@@ -79,7 +79,7 @@ class InterceptorManager {
     if (config != null) {
       config.enabled = true;
       if (kDebugMode) {
-        print('拦截器已启用: $name');
+        debugPrint('拦截器已启用: $name');
       }
       return true;
     }
@@ -92,7 +92,7 @@ class InterceptorManager {
     if (config != null) {
       config.enabled = false;
       if (kDebugMode) {
-        print('拦截器已禁用: $name');
+        debugPrint('拦截器已禁用: $name');
       }
       return true;
     }
@@ -169,12 +169,12 @@ class InterceptorManager {
         
         if (config.continueOnError) {
           if (kDebugMode) {
-            print('请求拦截器 "$name" 执行失败，继续执行: $e');
+            debugPrint('请求拦截器 "$name" 执行失败，继续执行: $e');
           }
           continue;
         } else {
           if (kDebugMode) {
-            print('请求拦截器 "$name" 执行失败，中断执行: $e');
+            debugPrint('请求拦截器 "$name" 执行失败，中断执行: $e');
           }
           rethrow;
         }
@@ -220,12 +220,12 @@ class InterceptorManager {
         
         if (config.continueOnError) {
           if (kDebugMode) {
-            print('响应拦截器 "$name" 执行失败，继续执行: $e');
+            debugPrint('响应拦截器 "$name" 执行失败，继续执行: $e');
           }
           continue;
         } else {
           if (kDebugMode) {
-            print('响应拦截器 "$name" 执行失败，中断执行: $e');
+            debugPrint('响应拦截器 "$name" 执行失败，中断执行: $e');
           }
           rethrow;
         }
@@ -270,12 +270,12 @@ class InterceptorManager {
         
         if (config.continueOnError) {
           if (kDebugMode) {
-            print('错误拦截器 "$name" 执行失败，继续执行: $e');
+            debugPrint('错误拦截器 "$name" 执行失败，继续执行: $e');
           }
           continue;
         } else {
           if (kDebugMode) {
-            print('错误拦截器 "$name" 执行失败，中断执行: $e');
+            debugPrint('错误拦截器 "$name" 执行失败，中断执行: $e');
           }
           // 对于错误拦截器，即使失败也不重新抛出异常
           continue;
@@ -589,7 +589,7 @@ class CacheInterceptor extends PluginInterceptor {
   ) async {
     // 检查缓存逻辑
     if (kDebugMode) {
-      print('缓存拦截器: 检查请求缓存');
+      debugPrint('缓存拦截器: 检查请求缓存');
     }
     return options;
   }
@@ -601,7 +601,7 @@ class CacheInterceptor extends PluginInterceptor {
   ) async {
     // 保存缓存逻辑
     if (kDebugMode) {
-      print('缓存拦截器: 保存响应缓存');
+      debugPrint('缓存拦截器: 保存响应缓存');
     }
     return response;
   }
@@ -631,7 +631,7 @@ class AuthInterceptor extends PluginInterceptor {
   ) async {
     // 添加认证头
     if (kDebugMode) {
-      print('认证拦截器: 添加认证信息');
+      debugPrint('认证拦截器: 添加认证信息');
     }
     return options;
   }
@@ -643,7 +643,7 @@ class AuthInterceptor extends PluginInterceptor {
   ) async {
     // 处理认证错误
     if (kDebugMode) {
-      print('认证拦截器: 处理认证错误');
+      debugPrint('认证拦截器: 处理认证错误');
     }
   }
 }
@@ -674,7 +674,7 @@ class LoggingInterceptor extends PluginInterceptor {
     RequestInterceptorHandler handler,
   ) async {
     if (kDebugMode) {
-      print('日志拦截器: 记录请求 ${options.method} ${options.uri}');
+      debugPrint('日志拦截器: 记录请求 ${options.method} ${options.uri}');
     }
     return options;
   }
@@ -685,7 +685,7 @@ class LoggingInterceptor extends PluginInterceptor {
     ResponseInterceptorHandler handler,
   ) async {
     if (kDebugMode) {
-      print('日志拦截器: 记录响应 ${response.statusCode}');
+      debugPrint('日志拦截器: 记录响应 ${response.statusCode}');
     }
     return response;
   }
@@ -696,7 +696,7 @@ class LoggingInterceptor extends PluginInterceptor {
     ErrorInterceptorHandler handler,
   ) async {
     if (kDebugMode) {
-      print('日志拦截器: 记录错误 ${err.message}');
+      debugPrint('日志拦截器: 记录错误 ${err.message}');
     }
   }
 }
@@ -722,7 +722,7 @@ class RetryInterceptor extends PluginInterceptor {
   ) async {
     // 重试逻辑
     if (kDebugMode) {
-      print('重试拦截器: 处理重试');
+      debugPrint('重试拦截器: 处理重试');
     }
   }
 }

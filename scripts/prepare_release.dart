@@ -1,15 +1,15 @@
 #!/usr/bin/env dart
 
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+
 /// BZY 网络框架发布准备脚本
 /// 
 /// 此脚本用于准备 BZY 网络框架的发布包
 /// 包括代码检查、测试运行、文档生成等
 
-import 'dart:io';
-import 'dart:convert';
-
 void main(List<String> args) async {
-  print('🚀 开始准备 BZY 网络框架发布包...');
+  debugPrint('🚀 开始准备 BZY 网络框架发布包...');
   
   final releaseHelper = BzyReleaseHelper();
   
@@ -32,12 +32,12 @@ void main(List<String> args) async {
     // 6. 创建发布包
     await releaseHelper.createReleasePackage();
     
-    print('✅ BZY 网络框架发布包准备完成！');
-    print('📦 发布包位置: ./release/bzy_network_framework.tar.gz');
-    print('📚 使用说明: ./release/README.md');
+    debugPrint('✅ BZY 网络框架发布包准备完成！');
+    debugPrint('📦 发布包位置: ./release/bzy_network_framework.tar.gz');
+    debugPrint('📚 使用说明: ./release/README.md');
     
   } catch (e) {
-    print('❌ 发布准备失败: $e');
+    debugPrint('❌ 发布准备失败: $e');
     exit(1);
   }
 }
@@ -48,7 +48,7 @@ class BzyReleaseHelper {
   
   /// 检查环境
   Future<void> checkEnvironment() async {
-    print('\n🔍 检查环境...');
+    debugPrint('\n🔍 检查环境...');
     
     // 检查 Flutter 版本
     final flutterResult = await Process.run('flutter', ['--version']);
@@ -62,18 +62,18 @@ class BzyReleaseHelper {
       throw Exception('Dart 未安装或版本不兼容');
     }
     
-    print('✅ 环境检查通过');
+    debugPrint('✅ 环境检查通过');
   }
   
   /// 运行代码分析
   Future<void> runAnalysis() async {
-    print('\n📊 运行代码分析...');
+    debugPrint('\n📊 运行代码分析...');
     
     final result = await Process.run('dart', ['analyze', '.']);
     if (result.exitCode != 0) {
-      print('⚠️  代码分析发现问题:');
-      print(result.stdout);
-      print(result.stderr);
+      debugPrint('⚠️  代码分析发现问题:');
+      debugPrint(result.stdout);
+      debugPrint(result.stderr);
       
       // 询问是否继续
       stdout.write('是否继续发布? (y/N): ');
@@ -82,28 +82,28 @@ class BzyReleaseHelper {
         throw Exception('用户取消发布');
       }
     } else {
-      print('✅ 代码分析通过');
+      debugPrint('✅ 代码分析通过');
     }
   }
   
   /// 运行测试
   Future<void> runTests() async {
-    print('\n🧪 运行测试...');
+    debugPrint('\n🧪 运行测试...');
     
     final result = await Process.run('flutter', ['test']);
     if (result.exitCode != 0) {
-      print('❌ 测试失败:');
-      print(result.stdout);
-      print(result.stderr);
+      debugPrint('❌ 测试失败:');
+      debugPrint(result.stdout);
+      debugPrint(result.stderr);
       throw Exception('测试未通过');
     }
     
-    print('✅ 所有测试通过');
+    debugPrint('✅ 所有测试通过');
   }
   
   /// 检查版本号
   Future<void> checkVersion() async {
-    print('\n🏷️  检查版本号...');
+    debugPrint('\n🏷️  检查版本号...');
     
     final pubspecFile = File('pubspec.yaml');
     if (!pubspecFile.existsSync()) {
@@ -118,39 +118,39 @@ class BzyReleaseHelper {
     }
     
     final version = versionMatch.group(1)!;
-    print('📋 当前版本: $version');
+    debugPrint('📋 当前版本: $version');
     
     // 检查 CHANGELOG.md 是否包含当前版本
     final changelogFile = File('CHANGELOG.md');
     if (changelogFile.existsSync()) {
       final changelogContent = await changelogFile.readAsString();
       if (!changelogContent.contains('[$version]')) {
-        print('⚠️  CHANGELOG.md 中未找到版本 $version 的更新记录');
+        debugPrint('⚠️  CHANGELOG.md 中未找到版本 $version 的更新记录');
       }
     }
     
-    print('✅ 版本检查完成');
+    debugPrint('✅ 版本检查完成');
   }
   
   /// 生成文档
   Future<void> generateDocs() async {
-    print('\n📚 生成文档...');
+    debugPrint('\n📚 生成文档...');
     
     // 生成 API 文档
     final docResult = await Process.run('dart', ['doc', '.']);
     if (docResult.exitCode != 0) {
-      print('⚠️  API 文档生成失败，但继续发布');
+      debugPrint('⚠️  API 文档生成失败，但继续发布');
     }
     
     // 创建发布说明
     await _createReleaseNotes();
     
-    print('✅ 文档生成完成');
+    debugPrint('✅ 文档生成完成');
   }
   
   /// 创建发布包
   Future<void> createReleasePackage() async {
-    print('\n📦 创建发布包...');
+    debugPrint('\n📦 创建发布包...');
     
     // 创建发布目录
     final releaseDir = Directory('release');
@@ -192,10 +192,10 @@ class BzyReleaseHelper {
     ]);
     
     if (tarResult.exitCode != 0) {
-      print('⚠️  压缩包创建失败，但文件已准备完成');
+      debugPrint('⚠️  压缩包创建失败，但文件已准备完成');
     }
     
-    print('✅ 发布包创建完成');
+    debugPrint('✅ 发布包创建完成');
   }
   
   /// 创建发布说明

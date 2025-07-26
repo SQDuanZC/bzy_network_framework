@@ -36,13 +36,13 @@ class NetworkLogger {
         final level = record.level.name.padRight(7);
         final logger = record.loggerName.padRight(20);
         if (kDebugMode) {
-          print('[$time] $level [$logger] ${record.message}');
+          debugPrint('[$time] $level [$logger] ${record.message}');
           
           if (record.error != null) {
-            print('Error: ${record.error}');
+            debugPrint('Error: ${record.error}');
           }
           if (record.stackTrace != null) {
-            print('StackTrace: ${record.stackTrace}');
+            debugPrint('StackTrace: ${record.stackTrace}');
           }
         }
       });

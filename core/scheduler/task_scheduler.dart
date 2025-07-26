@@ -81,7 +81,7 @@ class TaskScheduler {
     ));
     
     if (kDebugMode) {
-        print('任务调度器已启动');
+        debugPrint('任务调度器已启动');
       }
   }
   
@@ -108,7 +108,7 @@ class TaskScheduler {
       ));
       
       if (kDebugMode) {
-        print('任务调度器已停止');
+        debugPrint('任务调度器已停止');
       }
     });
   }
@@ -123,7 +123,7 @@ class TaskScheduler {
     _semaphore = Semaphore(_config.maxConcurrentTasks);
     
     if (kDebugMode) {
-      print('任务调度器已重新配置: 最大并发数=${config.maxConcurrentTasks}');
+      debugPrint('任务调度器已重新配置: 最大并发数=${config.maxConcurrentTasks}');
     }
   }
   

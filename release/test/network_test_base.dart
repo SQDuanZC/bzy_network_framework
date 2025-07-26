@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 
-import '../core/cache/cache_manager.dart';
-import '../core/config/network_config.dart';
-import '../frameworks/unified_framework.dart';
-import '../requests/base_network_request.dart';
-import '../model/network_response.dart';
+import '../../core/cache/cache_manager.dart';
+import '../../core/config/network_config.dart';
+import '../../frameworks/unified_framework.dart';
+import '../../requests/base_network_request.dart';
+import '../../model/network_response.dart';
 
-import '../core/di/service_locator.dart';
-import '../model/response_wrapper.dart';
+import '../../core/di/service_locator.dart';
+import '../../model/response_wrapper.dart';
 
 
 // =============================================================================

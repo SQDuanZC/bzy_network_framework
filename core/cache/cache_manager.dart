@@ -70,8 +70,8 @@ class CacheManager {
     } catch (e, stackTrace) {
       // 使用适当的日志记录而不是注释
       if (kDebugMode) {
-        print('缓存管理器初始化失败: $e');
-        print('堆栈跟踪: $stackTrace');
+        debugPrint('缓存管理器初始化失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
       }
       rethrow; // 重新抛出异常以便上层处理
     }
@@ -89,8 +89,8 @@ class CacheManager {
       }
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        print('创建缓存目录失败: $e');
-        print('堆栈跟踪: $stackTrace');
+        debugPrint('创建缓存目录失败: $e');
+        debugPrint('堆栈跟踪: $stackTrace');
       }
       // 不重新抛出，允许框架在没有磁盘缓存的情况下继续运行
     }
@@ -138,8 +138,8 @@ class CacheManager {
       return null;
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        print('获取缓存失败: $e');
-        print('堆栈跟踪: $stackTrace');
+        debugPrint('获取缓存失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
       }
       // 记录错误但不影响统计，因为CacheStatistics可能没有errors字段
       return null;
@@ -197,8 +197,8 @@ class CacheManager {
       _statistics.totalSets++;
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        print('设置缓存失败: $e');
-        print('堆栈跟踪: $stackTrace');
+        debugPrint('设置缓存失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
       }
       // 不重新抛出，缓存失败不应该影响主要业务流程
     }
@@ -271,8 +271,8 @@ class CacheManager {
       }
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        print('写入磁盘缓存失败: $e');
-        print('堆栈跟踪: $stackTrace');
+        debugPrint('写入磁盘缓存失败: $e');
+        debugPrint('堆栈跟踪: $stackTrace');
       }
       // 磁盘写入失败不应该影响主要流程
     }
@@ -340,8 +340,8 @@ class CacheManager {
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        print('读取磁盘缓存失败: $e');
-        print('堆栈跟踪: $stackTrace');
+        debugPrint('读取磁盘缓存失败: $e');
+        debugPrint('堆栈跟踪: $stackTrace');
       }
       return null;
     }
@@ -373,8 +373,8 @@ class CacheManager {
         }
       } catch (e, stackTrace) {
         if (kDebugMode) {
-          print('删除磁盘缓存失败: $e');
-          print('堆栈跟踪: $stackTrace');
+          debugPrint('删除磁盘缓存失败: $e');
+        debugPrint('堆栈跟踪: $stackTrace');
         }
         // 删除失败不影响主要流程
       }
@@ -401,8 +401,8 @@ class CacheManager {
         }
       } catch (e, stackTrace) {
         if (kDebugMode) {
-          print('清空磁盘缓存失败: $e');
-          print('堆栈跟踪: $stackTrace');
+          debugPrint('清空磁盘缓存失败: $e');
+        debugPrint('堆栈跟踪: $stackTrace');
         }
         // 清空失败不影响主要流程
       }
@@ -414,8 +414,8 @@ class CacheManager {
         await Future.wait(_diskIOQueue);
       } catch (e, stackTrace) {
         if (kDebugMode) {
-          print('等待磁盘I/O操作完成失败: $e');
-          print('堆栈跟踪: $stackTrace');
+          debugPrint('等待磁盘I/O操作完成失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
         }
         // 忽略已完成的Future错误
       }

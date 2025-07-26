@@ -53,7 +53,7 @@ class RetryInterceptor extends Interceptor {
     final retryCount = requestOptions.extra['retry_count'] as int? ?? 0;
     if (retryCount >= maxRetryCount) {
       if (kDebugMode) {
-        print('已达到最大重试次数: $maxRetryCount');
+        debugPrint('已达到最大重试次数: $maxRetryCount');
       }
       return false;
     }
@@ -64,7 +64,7 @@ class RetryInterceptor extends Interceptor {
       final allowRetry = requestOptions.extra['allow_retry'] as bool? ?? false;
       if (!allowRetry) {
         if (kDebugMode) {
-          print('非幂等性请求，跳过重试: ${requestOptions.method}');
+          debugPrint('非幂等性请求，跳过重试: ${requestOptions.method}');
         }
         return false;
       }
@@ -110,7 +110,7 @@ class RetryInterceptor extends Interceptor {
     final newRetryCount = retryCount + 1;
     
     if (kDebugMode) {
-      print('开始第 $newRetryCount 次重试: ${requestOptions.method} ${requestOptions.uri}');
+      debugPrint('开始第 $newRetryCount 次重试: ${requestOptions.method} ${requestOptions.uri}');
     }
     
     // 更新重试次数
@@ -120,7 +120,7 @@ class RetryInterceptor extends Interceptor {
     final delay = _calculateDelay(newRetryCount);
     if (delay.inMilliseconds > 0) {
       if (kDebugMode) {
-        print('重试延迟: ${delay.inMilliseconds}ms');
+        debugPrint('重试延迟: ${delay.inMilliseconds}ms');
       }
       await Future.delayed(delay);
     }
@@ -155,12 +155,12 @@ class RetryInterceptor extends Interceptor {
       );
       
       if (kDebugMode) {
-        print('重试成功: ${requestOptions.method} ${requestOptions.uri}');
+        debugPrint('重试成功: ${requestOptions.method} ${requestOptions.uri}');
       }
       return response;
     } catch (error) {
       if (kDebugMode) {
-        print('重试失败: ${requestOptions.method} ${requestOptions.uri}, 错误: $error');
+        debugPrint('重试失败: ${requestOptions.method} ${requestOptions.uri}, 错误: $error');
       }
       rethrow;
     }

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../requests/network_executor.dart';
-import '../requests/base_network_request.dart';
 
 /// 队列监控器 - 与NetworkExecutor完美集成的监控组件
 class QueueMonitor {
@@ -13,9 +12,9 @@ class QueueMonitor {
   bool _isMonitoring = false;
   
   /// 监控配置
-  Duration monitorInterval;
-  int maxHistorySize;
-  bool enableDetailedLogging;
+  final Duration monitorInterval = const Duration(seconds: 1);
+  final int maxHistorySize = 100;
+  final bool enableDetailedLogging = false;
   
   /// 单例实例
   static QueueMonitor get instance {
@@ -23,11 +22,7 @@ class QueueMonitor {
     return _instance!;
   }
   
-  QueueMonitor._internal({
-    this.monitorInterval = const Duration(seconds: 1),
-    this.maxHistorySize = 100,
-    this.enableDetailedLogging = false,
-  });
+  QueueMonitor._internal();
   
   /// 状态流 - 实时监控数据
   Stream<QueueStatus> get statusStream => _statusController.stream;
@@ -42,7 +37,7 @@ class QueueMonitor {
     });
     
     if (kDebugMode) {
-      print('QueueMonitor: 开始监控网络请求队列');
+      debugPrint('QueueMonitor: 开始监控网络请求队列');
     }
   }
   
@@ -54,7 +49,7 @@ class QueueMonitor {
     _monitorTimer.cancel();
     
     if (kDebugMode) {
-      print('QueueMonitor: 停止监控网络请求队列');
+      debugPrint('QueueMonitor: 停止监控网络请求队列');
     }
   }
   
@@ -177,7 +172,7 @@ class QueueMonitor {
     
     final metrics = status.currentMetrics;
     if (kDebugMode) {
-      print('QueueMonitor [${metrics.timestamp.toIso8601String()}]: '
+      debugPrint('QueueMonitor [${metrics.timestamp.toIso8601String()}]: '
           '待处理: ${metrics.pendingRequests}, '
           '队列中: ${metrics.queuedRequests}, '
           '缓存: ${metrics.cacheSize}');
@@ -186,7 +181,7 @@ class QueueMonitor {
     // 输出告警信息
     for (final alert in status.alerts) {
       if (kDebugMode) {
-        print('QueueMonitor ALERT [${alert.severity.name.toUpperCase()}]: ${alert.message}');
+        debugPrint('QueueMonitor ALERT [${alert.severity.name.toUpperCase()}]: ${alert.message}');
       }
     }
   }
@@ -246,24 +241,20 @@ class QueueMonitor {
   void reset() {
     _metricsHistory.clear();
     if (kDebugMode) {
-      print('QueueMonitor: 监控数据已重置');
+      debugPrint('QueueMonitor: 监控数据已重置');
     }
   }
   
-  /// 配置监控参数
+  /// 配置监控参数（已移除，配置现在是固定的）
+  @Deprecated('配置参数现在是固定的，无法在运行时修改')
   void configure({
     Duration? monitorInterval,
     int? maxHistorySize,
     bool? enableDetailedLogging,
   }) {
-    if (monitorInterval != null) this.monitorInterval = monitorInterval;
-    if (maxHistorySize != null) this.maxHistorySize = maxHistorySize;
-    if (enableDetailedLogging != null) this.enableDetailedLogging = enableDetailedLogging;
-    
-    // 如果正在监控，重启以应用新配置
-    if (_isMonitoring) {
-      stopMonitoring();
-      startMonitoring();
+    // 配置参数现在是 final 的，无法修改
+    if (kDebugMode) {
+      debugPrint('QueueMonitor: 配置参数现在是固定的，无法在运行时修改');
     }
   }
   

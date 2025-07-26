@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'base_network_request.dart';
 import '../model/network_response.dart';
 import '../config/network_config.dart';
