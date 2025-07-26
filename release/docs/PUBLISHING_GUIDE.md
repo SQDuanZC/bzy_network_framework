@@ -265,8 +265,8 @@ ls -la release/
 
 如果在发布过程中遇到问题，请通过以下方式获取帮助：
 
-- **GitHub Issues**: https://github.com/your-org/bzy_network_framework/issues
-- **邮箱**: support@bzy.com
+- **GitHub Issues**: https://github.com/SQDuanZC/bzy_network_framework/issues
+- **邮箱**: bzysq521@163.com
 - **文档**: https://pub.dev/packages/bzy_network_framework
 
 ---

@@ -221,7 +221,7 @@ dependencies:
 dependencies:
   $packageName:
     git:
-      url: https://github.com/your-org/$packageName.git
+      url: https://github.com/SQDuanZC/$packageName.git
       ref: main
 ```
 
@@ -259,8 +259,8 @@ void main() async {
 
 如果您在使用过程中遇到问题，请通过以下方式反馈：
 
-- GitHub Issues: https://github.com/your-org/$packageName/issues
-- 邮箱: support@bzy.com
+- GitHub Issues: https://github.com/SQDuanZC/$packageName/issues
+- 邮箱: bzysq521@163.com
 
 ## 📄 许可证
 
