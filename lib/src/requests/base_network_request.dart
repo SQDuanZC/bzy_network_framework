@@ -133,32 +133,10 @@ class NetworkException implements Exception {
   }
 }
 
-/// 简单GET请求基类
-abstract class GetRequest<T> extends BaseNetworkRequest<T> {
-  @override
-  HttpMethod get method => HttpMethod.get;
-}
-
-/// 简单POST请求基类
-abstract class PostRequest<T> extends BaseNetworkRequest<T> {
+/// 文件上传请求基类
+abstract class UploadRequest<T> extends BaseNetworkRequest<T> {
   @override
   HttpMethod get method => HttpMethod.post;
-}
-
-/// 简单PUT请求基类
-abstract class PutRequest<T> extends BaseNetworkRequest<T> {
-  @override
-  HttpMethod get method => HttpMethod.put;
-}
-
-/// 简单DELETE请求基类
-abstract class DeleteRequest<T> extends BaseNetworkRequest<T> {
-  @override
-  HttpMethod get method => HttpMethod.delete;
-}
-
-/// 文件上传请求基类
-abstract class UploadRequest<T> extends PostRequest<T> {
   /// 上传文件路径
   String get filePath;
   
@@ -181,7 +159,9 @@ abstract class UploadRequest<T> extends PostRequest<T> {
 }
 
 /// 文件下载请求基类
-abstract class DownloadRequest<T> extends GetRequest<T> {
+abstract class DownloadRequest<T> extends BaseNetworkRequest<T> {
+  @override
+  HttpMethod get method => HttpMethod.get;
   /// 下载文件保存路径
   String get savePath;
   
@@ -198,29 +178,5 @@ abstract class DownloadRequest<T> extends GetRequest<T> {
   void Function(String error)? get onDownloadError => null;
   
   @override
-  HttpMethod get method => HttpMethod.get;
-  
-  @override
   bool get enableCache => false; // 下载请求通常不缓存
-}
-
-/// 分页请求基类
-abstract class PagedRequest<T> extends GetRequest<T> {
-  final int page;
-  final int pageSize;
-  
-  PagedRequest({
-    required this.page,
-    this.pageSize = 20,
-  });
-  
-  @override
-  Map<String, dynamic>? get queryParameters => {
-    'page': page,
-    'pageSize': pageSize,
-    ...?getExtraParams(),
-  };
-  
-  /// 获取额外参数
-  Map<String, dynamic>? getExtraParams() => null;
 }

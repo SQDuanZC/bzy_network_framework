@@ -102,10 +102,13 @@ class User {
 
 ```dart
 // Get single user
-class GetUserRequest extends GetRequest<User> {
+class GetUserRequest extends BaseNetworkRequest<User> {
   final String userId;
   
   GetUserRequest(this.userId);
+  
+  @override
+  HttpMethod get method => HttpMethod.get;
   
   @override
   String get path => '/users/$userId';
@@ -117,11 +120,14 @@ class GetUserRequest extends GetRequest<User> {
 }
 
 // Get user list
-class GetUsersRequest extends GetRequest<List<User>> {
+class GetUsersRequest extends BaseNetworkRequest<List<User>> {
   final int page;
   final int limit;
   
   GetUsersRequest({this.page = 1, this.limit = 20});
+  
+  @override
+  HttpMethod get method => HttpMethod.get;
   
   @override
   String get path => '/users';
@@ -144,11 +150,14 @@ class GetUsersRequest extends GetRequest<List<User>> {
 
 ```dart
 // Create user
-class CreateUserRequest extends PostRequest<User> {
+class CreateUserRequest extends BaseNetworkRequest<User> {
   final String name;
   final String email;
   
   CreateUserRequest({required this.name, required this.email});
+  
+  @override
+  HttpMethod get method => HttpMethod.post;
   
   @override
   String get path => '/users';
@@ -170,7 +179,7 @@ class CreateUserRequest extends PostRequest<User> {
 
 ```dart
 // Update user information
-class UpdateUserRequest extends PutRequest<User> {
+class UpdateUserRequest extends BaseNetworkRequest<User> {
   final String userId;
   final String? name;
   final String? email;
@@ -180,6 +189,9 @@ class UpdateUserRequest extends PutRequest<User> {
     this.name,
     this.email,
   });
+  
+  @override
+  HttpMethod get method => HttpMethod.put;
   
   @override
   String get path => '/users/$userId';
@@ -201,10 +213,13 @@ class UpdateUserRequest extends PutRequest<User> {
 
 ```dart
 // Delete user
-class DeleteUserRequest extends DeleteRequest<bool> {
+class DeleteUserRequest extends BaseNetworkRequest<bool> {
   final String userId;
   
   DeleteUserRequest(this.userId);
+  
+  @override
+  HttpMethod get method => HttpMethod.delete;
   
   @override
   String get path => '/users/$userId';

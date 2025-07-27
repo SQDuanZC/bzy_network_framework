@@ -299,7 +299,9 @@ class NetworkFrameworkUsageExamples {
 }
 
 /// 自定义API请求示例
-class CustomApiRequest extends GetRequest<Map<String, dynamic>> {
+class CustomApiRequest extends BaseNetworkRequest<Map<String, dynamic>> {
+  @override
+  HttpMethod get method => HttpMethod.get;
   final String endpoint;
   final Map<String, dynamic> params;
   

@@ -212,7 +212,9 @@ await framework.initialize(
 );
 
 // 2. 使用高级功能
-class AdvancedUserRequest extends GetRequest<User> {
+class AdvancedUserRequest extends BaseNetworkRequest<User> {
+  @override
+  HttpMethod get method => HttpMethod.get;
   @override
   String get path => '/user/profile';
   

@@ -33,7 +33,7 @@
 - **DeleteRequest**: DELETE 请求基类
 - **UploadRequest**: 文件上传请求
 - **DownloadRequest**: 文件下载请求
-- **PagedRequest**: 分页请求基类
+- **分页请求**: 业务层可自行封装分页逻辑，直接继承BaseNetworkRequest
 
 #### 🔧 内置拦截器
 - **LoggingInterceptor**: 日志拦截器

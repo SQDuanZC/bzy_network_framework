@@ -55,7 +55,9 @@ void main() async {
 
 ```dart
 // 定义请求类
-class GetUserRequest extends GetRequest<UserModel> {
+class GetUserRequest extends BaseNetworkRequest<UserModel> {
+  @override
+  HttpMethod get method => HttpMethod.get;
   final String userId;
   
   GetUserRequest(this.userId);
@@ -84,7 +86,9 @@ if (response.success) {
 ### 2. POST 请求示例
 
 ```dart
-class CreateUserRequest extends PostRequest<UserModel> {
+class CreateUserRequest extends BaseNetworkRequest<UserModel> {
+  @override
+  HttpMethod get method => HttpMethod.post;
   final String name;
   final String email;
   
@@ -119,14 +123,19 @@ final response = await UnifiedNetworkFramework.instance.execute(request);
 ### 3. 分页请求
 
 ```dart
-class GetUsersListRequest extends PagedRequest<List<UserModel>> {
+class GetUsersListRequest extends BaseNetworkRequest<List<UserModel>> {
+  final int page;
+  final int pageSize;
   final String? searchKeyword;
   
   GetUsersListRequest({
-    required super.page,
-    super.pageSize = 20,
+    required this.page,
+    this.pageSize = 20,
     this.searchKeyword,
   });
+  
+  @override
+  HttpMethod get method => HttpMethod.get;
   
   @override
   String get path => '/users';
@@ -283,7 +292,9 @@ final response = await UnifiedNetworkFramework.instance.execute(
 ### 5. 请求优先级
 
 ```dart
-class CriticalRequest extends GetRequest<Data> {
+class CriticalRequest extends BaseNetworkRequest<Data> {
+  @override
+  HttpMethod get method => HttpMethod.get;
   @override
   String get path => '/critical-data';
   
@@ -296,7 +307,9 @@ class CriticalRequest extends GetRequest<Data> {
   }
 }
 
-class BackgroundRequest extends GetRequest<Data> {
+class BackgroundRequest extends BaseNetworkRequest<Data> {
+  @override
+  HttpMethod get method => HttpMethod.get;
   @override
   String get path => '/background-data';
   

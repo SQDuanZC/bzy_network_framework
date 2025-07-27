@@ -108,10 +108,8 @@ class RequestManager {
 
 ### 1. 标准HTTP请求
 
-- **GetRequest**: GET请求，支持缓存策略
-- **PostRequest**: POST请求，支持重试机制
-- **PutRequest**: PUT请求，用于更新资源
-- **DeleteRequest**: DELETE请求，用于删除资源
+- **BaseNetworkRequest**: 基础网络请求类，支持所有HTTP方法
+- 直接继承BaseNetworkRequest并设置method属性，避免过多的简单基类
 
 ### 2. 特殊请求类型
 

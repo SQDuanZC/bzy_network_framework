@@ -291,7 +291,9 @@ await framework.initialize(
 );
 
 // 定义请求对象
-class GetUserProfileRequest extends GetRequest<UserProfile> {
+class GetUserProfileRequest extends BaseNetworkRequest<UserProfile> {
+  @override
+  HttpMethod get method => HttpMethod.get;
   final String userId;
   GetUserProfileRequest({required this.userId});
   
