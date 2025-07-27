@@ -5,8 +5,9 @@ import '../requests/network_executor.dart';
 import '../model/network_response.dart';
 import '../config/network_config.dart';
 import '../utils/network_logger.dart';
+import '../core/exception/unified_exception_handler.dart';
 
-/// 统一网络框架 - 插件化架构的核心入口点
+/// Unified network framework - core entry point for plugin architecture
 class UnifiedNetworkFramework {
   static UnifiedNetworkFramework? _instance;
   late NetworkExecutor _executor;
@@ -14,7 +15,7 @@ class UnifiedNetworkFramework {
   final List<GlobalInterceptor> _globalInterceptors = [];
   bool _isInitialized = false;
   
-  /// 单例实例
+  /// Singleton instance
   static UnifiedNetworkFramework get instance {
     _instance ??= UnifiedNetworkFramework._internal();
     return _instance!;
@@ -22,9 +23,21 @@ class UnifiedNetworkFramework {
   
   UnifiedNetworkFramework._internal() {
     _executor = NetworkExecutor.instance;
+    _initializeExceptionHandling();
   }
   
-  /// 初始化框架
+  /// Initialize exception handling
+  void _initializeExceptionHandling() {
+    // Add exception interceptor to network executor
+    _executor.addInterceptor(ExceptionInterceptor());
+    
+    // Register default global exception handler
+    UnifiedExceptionHandler.instance.registerGlobalHandler(
+      DefaultGlobalExceptionHandler(),
+    );
+  }
+  
+  /// Initialize framework
   Future<void> initialize({
     required String baseUrl,
     Map<String, dynamic>? config,
@@ -35,7 +48,7 @@ class UnifiedNetworkFramework {
       throw StateError('UnifiedNetworkFramework is already initialized');
     }
     
-    // 初始化网络配置
+    // Initialize network configuration
     NetworkConfig.instance.initialize(
       baseUrl: baseUrl,
       connectTimeout: config?['connectTimeout'],
@@ -54,27 +67,27 @@ class UnifiedNetworkFramework {
       userAgent: config?['userAgent'],
     );
     
-    // 注册插件
+    // Register plugins
     if (plugins != null) {
       for (final plugin in plugins) {
         await registerPlugin(plugin);
       }
     }
     
-    // 注册全局拦截器
+    // Register global interceptors
     if (interceptors != null) {
       for (final interceptor in interceptors) {
         registerGlobalInterceptor(interceptor);
       }
     }
     
-    // 重新配置执行器
+    // Reconfigure executor
     _executor.reconfigure();
     
     _isInitialized = true;
   }
   
-  /// 注册插件
+  /// Register plugin
   Future<void> registerPlugin(NetworkPlugin plugin) async {
     if (_plugins.containsKey(plugin.name)) {
       throw ArgumentError('Plugin ${plugin.name} is already registered');
@@ -83,17 +96,17 @@ class UnifiedNetworkFramework {
     await plugin.initialize();
     _plugins[plugin.name] = plugin;
     
-    // 注册插件的拦截器
+    // Register plugin interceptors
     for (final interceptor in plugin.interceptors) {
       _executor.addInterceptor(interceptor);
     }
   }
   
-  /// 注销插件
+  /// Unregister plugin
   Future<void> unregisterPlugin(String pluginName) async {
     final plugin = _plugins.remove(pluginName);
     if (plugin != null) {
-      // 移除插件的拦截器
+      // Remove plugin interceptors
       for (final interceptor in plugin.interceptors) {
         _executor.removeInterceptor(interceptor);
       }
@@ -102,23 +115,23 @@ class UnifiedNetworkFramework {
     }
   }
   
-  /// 注册全局拦截器
+  /// Register global interceptor
   void registerGlobalInterceptor(GlobalInterceptor interceptor) {
     _globalInterceptors.add(interceptor);
     _executor.addInterceptor(interceptor);
   }
   
-  /// 移除全局拦截器
+  /// Remove global interceptor
   void removeGlobalInterceptor(GlobalInterceptor interceptor) {
     _globalInterceptors.remove(interceptor);
     _executor.removeInterceptor(interceptor);
   }
   
-  /// 执行网络请求
+  /// Execute network request
   Future<NetworkResponse<T>> execute<T>(BaseNetworkRequest<T> request) async {
     _ensureInitialized();
     
-    // 应用插件的请求预处理
+    // Apply plugin request preprocessing
     for (final plugin in _plugins.values) {
       await plugin.onRequestStart(request);
     }
@@ -126,28 +139,40 @@ class UnifiedNetworkFramework {
     try {
       final response = await _executor.execute(request);
       
-      // 应用插件的响应后处理
+      // Apply plugin response post-processing
       for (final plugin in _plugins.values) {
         await plugin.onRequestComplete(request, response);
       }
       
       return response;
     } catch (error) {
-      // 应用插件的错误处理
+      // Use unified exception handling system
+      final unifiedException = await UnifiedExceptionHandler.instance.handleException(
+        error,
+        context: 'Unified network framework request execution',
+        metadata: {
+          'requestType': request.runtimeType.toString(),
+          'path': request.path,
+          'method': request.method.value,
+        },
+      );
+      
+      // Apply plugin error handling
       for (final plugin in _plugins.values) {
-        await plugin.onRequestError(request, error);
+        await plugin.onRequestError(request, unifiedException);
       }
+      
       rethrow;
     }
   }
   
-  /// 批量执行请求
+  /// Execute batch requests
   Future<List<NetworkResponse>> executeBatch(List<BaseNetworkRequest> requests) async {
     _ensureInitialized();
     return await _executor.executeBatch(requests);
   }
   
-  /// 并发执行请求
+  /// Execute concurrent requests
   Future<List<NetworkResponse>> executeConcurrent(
     List<BaseNetworkRequest> requests, {
     int maxConcurrency = 3,
@@ -156,17 +181,17 @@ class UnifiedNetworkFramework {
     return await _executor.executeConcurrent(requests, maxConcurrency: maxConcurrency);
   }
   
-  /// 取消请求
+  /// Cancel request
   void cancelRequest(BaseNetworkRequest request) {
     _executor.cancelRequest(request);
   }
   
-  /// 取消所有请求
+  /// Cancel all requests
   void cancelAllRequests() {
     _executor.cancelAllRequests();
   }
   
-  /// 更新配置
+  /// Update configuration
   void updateConfig(Map<String, dynamic> config) {
     final networkConfig = NetworkConfig.instance;
     
@@ -287,6 +312,11 @@ abstract class NetworkPlugin {
   
   /// 请求错误时调用
   Future<void> onRequestError(BaseNetworkRequest request, dynamic error) async {}
+  
+  /// 异常处理接口（新增）
+  Future<void> onException(UnifiedException exception) async {
+    // 默认实现为空，子类可以重写
+  }
   
   /// 清理插件资源
   Future<void> dispose();

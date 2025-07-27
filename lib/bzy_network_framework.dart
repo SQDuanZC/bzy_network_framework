@@ -15,8 +15,11 @@ export 'src/frameworks/unified_framework.dart';
 export 'src/core/interceptor/logging_interceptor.dart';
 
 // 数据模型
-export 'src/model/response_wrapper.dart' hide NetworkException;
+export 'src/model/response_wrapper.dart';
 export 'src/model/network_response.dart';
+
+// 统一异常处理系统
+export 'src/core/exception/unified_exception_handler.dart' hide LogLevel;
 
 // 工具类
 export 'src/utils/network_utils.dart';

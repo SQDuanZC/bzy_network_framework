@@ -1,8 +1,9 @@
 import 'package:dio/dio.dart';
 import '../model/network_response.dart';
 import '../config/network_config.dart';
+import '../core/exception/unified_exception_handler.dart';
 
-/// HTTP方法枚举
+/// HTTP method enumeration
 enum HttpMethod {
   get('GET'),
   post('POST'),
@@ -16,66 +17,66 @@ enum HttpMethod {
   final String value;
 }
 
-/// 网络请求基类 - "每个网络请求都是对象"的核心实现
+/// Base network request class - Core implementation of "every network request is an object"
 abstract class BaseNetworkRequest<T> {
-  /// 请求路径
+  /// Request path
   String get path;
   
-  /// HTTP方法
+  /// HTTP method
   HttpMethod get method => HttpMethod.get;
   
-  /// 请求参数
+  /// Request parameters
   Map<String, dynamic>? get queryParameters => null;
   
-  /// 请求体数据
+  /// Request body data
   dynamic get data => null;
   
-  /// 请求头
+  /// Request headers
   Map<String, dynamic>? get headers => null;
   
-  /// 超时时间（毫秒）
+  /// Timeout duration (milliseconds)
   int? get timeout => null;
   
-  /// 是否启用缓存
+  /// Whether to enable cache
   bool get enableCache => false;
   
-  /// 缓存时长（秒）
+  /// Cache duration (seconds)
   int get cacheDuration => 300;
   
-  /// 缓存键
+  /// Cache key
   String? get cacheKey => null;
   
-  /// 重试次数
+  /// Retry count
   int get retryCount => 0;
   
-  /// 重试间隔（毫秒）
+  /// Retry delay (milliseconds)
   int get retryDelay => 1000;
   
-  /// 请求优先级
+  /// Request priority
   RequestPriority get priority => RequestPriority.normal;
   
-  /// 是否需要认证
+  /// Whether authentication is required
   bool get requiresAuth => true;
   
-  /// 自定义拦截器
+  /// Custom interceptors
   List<Interceptor>? get customInterceptors => null;
   
-  /// 响应数据解析
+  /// Response data parsing
   T parseResponse(dynamic data);
   
-  /// 错误处理
+  /// Error handling (returns compatible NetworkException)
   NetworkException? handleError(DioException error) => null;
   
-  /// 请求前置处理
+  /// Pre-request processing
   void onRequestStart() {}
   
-  /// 请求完成处理
+  /// Request completion processing
   void onRequestComplete(NetworkResponse<T> response) {}
   
-  /// 请求失败处理
+  /// Request failure processing
   void onRequestError(NetworkException error) {}
   
-  /// 获取完整的请求选项
+  /// Get complete request options
   RequestOptions buildRequestOptions() {
     final config = NetworkConfig.instance;
     
@@ -93,7 +94,7 @@ abstract class BaseNetworkRequest<T> {
     );
   }
   
-  /// 获取缓存键
+  /// Get cache key
   String getCacheKey() {
     if (cacheKey != null) return cacheKey!;
     
@@ -105,7 +106,7 @@ abstract class BaseNetworkRequest<T> {
   }
 }
 
-/// 请求优先级枚举
+/// Request priority enumeration
 enum RequestPriority {
   low,
   normal,
@@ -113,7 +114,7 @@ enum RequestPriority {
   critical,
 }
 
-/// 网络异常类
+/// Compatibility NetworkException class (for backward compatibility)
 class NetworkException implements Exception {
   final String message;
   final int? statusCode;
@@ -127,23 +128,33 @@ class NetworkException implements Exception {
     this.originalError,
   });
   
+  /// Create from UnifiedException
+  factory NetworkException.fromUnified(UnifiedException exception) {
+    return NetworkException(
+      message: exception.message,
+      statusCode: exception.statusCode,
+      errorCode: exception.code.name,
+      originalError: exception.originalError,
+    );
+  }
+  
   @override
   String toString() {
     return 'NetworkException: $message (statusCode: $statusCode, errorCode: $errorCode)';
   }
 }
 
-/// 文件上传请求基类
+/// File upload request base class
 abstract class UploadRequest<T> extends BaseNetworkRequest<T> {
   @override
   HttpMethod get method => HttpMethod.post;
-  /// 上传文件路径
+  /// Upload file path
   String get filePath;
   
-  /// 文件字段名
+  /// File field name
   String get fileFieldName => 'file';
   
-  /// 上传进度回调
+  /// Upload progress callback
   void Function(int sent, int total)? get onProgress => null;
   
   @override
@@ -154,29 +165,29 @@ abstract class UploadRequest<T> extends BaseNetworkRequest<T> {
     });
   }
   
-  /// 获取表单数据
+  /// Get form data
   Map<String, dynamic>? getFormData() => null;
 }
 
-/// 文件下载请求基类
+/// File download request base class
 abstract class DownloadRequest<T> extends BaseNetworkRequest<T> {
   @override
   HttpMethod get method => HttpMethod.get;
-  /// 下载文件保存路径
+  /// Download file save path
   String get savePath;
   
-  /// 下载进度回调
+  /// Download progress callback
   void Function(int received, int total)? get onProgress => null;
   
-  /// 是否覆盖已存在的文件
+  /// Whether to overwrite existing files
   bool get overwriteExisting => true;
   
-  /// 下载完成回调
+  /// Download completion callback
   void Function(String filePath)? get onDownloadComplete => null;
   
-  /// 下载失败回调
+  /// Download failure callback
   void Function(String error)? get onDownloadError => null;
   
   @override
-  bool get enableCache => false; // 下载请求通常不缓存
+  bool get enableCache => false; // Download requests are usually not cached
 }

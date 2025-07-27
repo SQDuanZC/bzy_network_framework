@@ -4,8 +4,9 @@ import 'package:dio/dio.dart';
 import 'base_network_request.dart';
 import '../model/network_response.dart';
 import '../config/network_config.dart';
+import '../core/exception/unified_exception_handler.dart';
 
-/// 网络请求执行器 - 统一的网络请求入口点
+/// Network request executor - unified network request entry point
 class NetworkExecutor {
   static NetworkExecutor? _instance;
   late Dio _dio;
@@ -20,7 +21,7 @@ class NetworkExecutor {
   final Map<String, Timer> _cacheTimers = {};
   bool _isProcessingQueue = false;
   
-  /// 单例实例
+  /// Singleton instance
   static NetworkExecutor get instance {
     _instance ??= NetworkExecutor._internal();
     return _instance!;
@@ -30,7 +31,7 @@ class NetworkExecutor {
     _initializeDio();
   }
   
-  /// 初始化Dio实例
+  /// Initialize Dio instance
   void _initializeDio() {
     final config = NetworkConfig.instance;
     
@@ -42,15 +43,15 @@ class NetworkExecutor {
       headers: config.defaultHeaders,
     ));
     
-    // 添加拦截器
+    // Add interceptors
     _setupInterceptors();
   }
   
-  /// 设置拦截器
+  /// Setup interceptors
   void _setupInterceptors() {
     final config = NetworkConfig.instance;
     
-    // 基础拦截器设置
+    // Basic interceptor setup
     if (config.enableLogging) {
       _dio.interceptors.add(LogInterceptor(
         requestBody: true,
@@ -60,9 +61,9 @@ class NetworkExecutor {
     }
   }
   
-  /// 执行网络请求
+  /// Execute network request
   Future<NetworkResponse<T>> execute<T>(BaseNetworkRequest<T> request) async {
-    // 检查缓存
+    // Check cache
     if (request.enableCache) {
       final cachedResponse = await _getCachedResponse<T>(request);
       if (cachedResponse != null) {
@@ -71,14 +72,14 @@ class NetworkExecutor {
       }
     }
     
-    // 检查是否有相同的请求正在进行
+    // Check if same request is in progress
     final requestKey = _getRequestKey(request);
     if (_pendingRequests.containsKey(requestKey)) {
       final result = await _pendingRequests[requestKey]!.future;
       return result as NetworkResponse<T>;
     }
     
-    // 根据优先级处理请求
+    // Handle request based on priority
     if (request.priority != RequestPriority.critical) {
       return await _enqueueRequest(request);
     }
@@ -86,7 +87,7 @@ class NetworkExecutor {
     return await _executeRequest(request);
   }
   
-  /// 执行具体的网络请求
+  /// Execute specific network request
   Future<NetworkResponse<T>> _executeRequest<T>(BaseNetworkRequest<T> request) async {
     final requestKey = _getRequestKey(request);
     final completer = Completer<NetworkResponse<T>>();
@@ -96,22 +97,22 @@ class NetworkExecutor {
       request.onRequestStart();
       final startTime = DateTime.now();
       
-      // 构建请求选项
+      // Build request options
       final options = request.buildRequestOptions();
       
-      // 添加自定义拦截器
+      // Add custom interceptors
       if (request.customInterceptors != null) {
         for (final interceptor in request.customInterceptors!) {
           _dio.interceptors.add(interceptor);
         }
       }
       
-      // 检查是否为下载请求
+      // Check if it's a download request
       if (request is DownloadRequest) {
         return await _executeDownloadRequest<T>(request as DownloadRequest<T>);
       }
       
-      // 执行普通请求
+      // Execute normal request
       final response = await _dio.request(
         options.path,
         options: Options(
@@ -126,7 +127,7 @@ class NetworkExecutor {
       
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       
-      // 解析响应
+      // Parse response
       final parsedData = request.parseResponse(response.data);
       
       final networkResponse = NetworkResponse<T>.success(
@@ -137,7 +138,7 @@ class NetworkExecutor {
         duration: duration,
       );
       
-      // 缓存响应
+      // Cache response
       if (request.enableCache) {
         await _cacheResponse(request, networkResponse);
       }
@@ -148,22 +149,35 @@ class NetworkExecutor {
       return networkResponse;
       
     } catch (error) {
-      NetworkException networkException;
+      // Use unified exception handling system
+      final unifiedException = await UnifiedExceptionHandler.instance.handleException(
+        error,
+        context: 'Network request execution',
+        metadata: {
+          'path': request.path,
+          'method': request.method.value,
+          'enableCache': request.enableCache,
+        },
+      );
       
+      // Try to use request's custom error handling
+      NetworkException? customException;
       if (error is DioException) {
-        // 尝试使用请求的自定义错误处理
-        networkException = request.handleError(error) ?? _handleDioError(error);
-      } else {
-        networkException = NetworkException(
-          message: error.toString(),
-          originalError: error,
-        );
+        customException = request.handleError(error);
       }
       
       final errorResponse = NetworkResponse<T>.error(
-        message: networkException.message,
-        statusCode: networkException.statusCode ?? -1,
-        errorCode: networkException.errorCode,
+        message: customException?.message ?? unifiedException.message,
+        statusCode: customException?.statusCode ?? unifiedException.statusCode,
+        errorCode: customException?.errorCode ?? unifiedException.code.name,
+      );
+      
+      // Create compatible NetworkException for callback
+      final networkException = NetworkException(
+        message: unifiedException.message,
+        statusCode: unifiedException.statusCode,
+        errorCode: unifiedException.code.name,
+        originalError: unifiedException.originalError,
       );
       
       request.onRequestError(networkException);
@@ -174,7 +188,7 @@ class NetworkExecutor {
     } finally {
       _pendingRequests.remove(requestKey);
       
-      // 移除自定义拦截器
+      // Remove custom interceptors
       if (request.customInterceptors != null) {
         for (final interceptor in request.customInterceptors!) {
           _dio.interceptors.remove(interceptor);
@@ -183,20 +197,20 @@ class NetworkExecutor {
     }
   }
   
-  /// 将请求加入队列
+  /// Enqueue request
   Future<NetworkResponse<T>> _enqueueRequest<T>(BaseNetworkRequest<T> request) async {
-    // 直接执行请求，不使用队列机制（简化实现）
+    // Execute request directly, without using queue mechanism (simplified implementation)
     return await _executeRequest(request);
   }
   
-  /// 处理请求队列
+  /// Process request queue
   void _processRequestQueue() async {
     if (_isProcessingQueue) return;
     
     _isProcessingQueue = true;
     
     try {
-      // 按优先级处理请求
+      // Process requests by priority
       for (final priority in RequestPriority.values.reversed) {
         final queue = _requestQueues[priority]!;
         
@@ -204,7 +218,7 @@ class NetworkExecutor {
           final request = queue.removeAt(0);
           await _executeRequest(request);
           
-          // 添加小延迟避免过于频繁的请求
+          // Add small delay to avoid too frequent requests
           if (priority != RequestPriority.critical) {
             await Future.delayed(const Duration(milliseconds: 10));
           }
@@ -215,13 +229,13 @@ class NetworkExecutor {
     }
   }
   
-  /// 批量执行请求
+  /// Execute batch requests
   Future<List<NetworkResponse>> executeBatch(List<BaseNetworkRequest> requests) async {
     final futures = requests.map((request) => execute(request)).toList();
     return await Future.wait(futures);
   }
   
-  /// 并发执行请求（限制并发数）
+  /// Execute concurrent requests (with concurrency limit)
   Future<List<NetworkResponse>> executeConcurrent(
     List<BaseNetworkRequest> requests, {
     int maxConcurrency = 3,
@@ -237,11 +251,11 @@ class NetworkExecutor {
     return results;
   }
   
-  /// 取消请求
+  /// Cancel request
   void cancelRequest(BaseNetworkRequest request) {
     final requestKey = _getRequestKey(request);
     
-    // 从待处理请求中移除
+    // Remove from pending requests
     final completer = _pendingRequests.remove(requestKey);
     if (completer != null && !completer.isCompleted) {
       completer.complete(NetworkResponse.error(
@@ -251,15 +265,15 @@ class NetworkExecutor {
       ));
     }
     
-    // 从队列中移除
+    // Remove from queue
     for (final queue in _requestQueues.values) {
       queue.removeWhere((r) => _getRequestKey(r) == requestKey);
     }
   }
   
-  /// 取消所有请求
+  /// Cancel all requests
   void cancelAllRequests() {
-    // 取消所有待处理的请求
+    // Cancel all pending requests
     for (final completer in _pendingRequests.values) {
       if (!completer.isCompleted) {
         completer.complete(NetworkResponse.error(
@@ -271,13 +285,13 @@ class NetworkExecutor {
     }
     _pendingRequests.clear();
     
-    // 清空所有队列
+    // Clear all queues
     for (final queue in _requestQueues.values) {
       queue.clear();
     }
   }
   
-  /// 获取缓存的响应
+  /// Get cached response
   Future<NetworkResponse<T>?> _getCachedResponse<T>(BaseNetworkRequest<T> request) async {
     final cacheKey = request.getCacheKey();
     final cachedData = _cache[cacheKey];
@@ -290,7 +304,7 @@ class NetworkExecutor {
           message: 'From Cache',
         );
       } catch (e) {
-        // 缓存数据解析失败，移除缓存
+        // Cache data parsing failed, remove cache
         _cache.remove(cacheKey);
       }
     }
@@ -298,16 +312,16 @@ class NetworkExecutor {
     return null;
   }
   
-  /// 缓存响应
+  /// Cache response
   Future<void> _cacheResponse<T>(BaseNetworkRequest<T> request, NetworkResponse<T> response) async {
     if (response.success && response.data != null) {
       final cacheKey = request.getCacheKey();
       _cache[cacheKey] = response.data;
       
-      // 取消之前的定时器
+      // Cancel previous timer
       _cacheTimers[cacheKey]?.cancel();
       
-      // 设置新的过期定时器
+      // Set new expiration timer
       _cacheTimers[cacheKey] = Timer(Duration(seconds: request.cacheDuration), () {
         _cache.remove(cacheKey);
         _cacheTimers.remove(cacheKey);
@@ -315,8 +329,10 @@ class NetworkExecutor {
     }
   }
   
-  /// 处理Dio错误
+  /// Handle Dio error (deprecated, use unified exception handling system)
+  @Deprecated('Use UnifiedExceptionHandler.instance.handleException instead')
   NetworkException _handleDioError(DioException error) {
+    // Keep this method to ensure backward compatibility
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
         return const NetworkException(
@@ -365,31 +381,31 @@ class NetworkExecutor {
     }
   }
   
-  /// 获取请求唯一键
+  /// Get request unique key
   String _getRequestKey(BaseNetworkRequest request) {
     return '${request.method}:${request.path}:${request.queryParameters?.toString() ?? ''}:${request.data?.toString() ?? ''}';
   }
   
-  /// 重新配置Dio
+  /// Reconfigure Dio
   void reconfigure() {
     _initializeDio();
   }
   
-  /// 添加全局拦截器
+  /// Add global interceptor
   void addInterceptor(Interceptor interceptor) {
     _dio.interceptors.add(interceptor);
   }
   
-  /// 移除全局拦截器
+  /// Remove global interceptor
   void removeInterceptor(Interceptor interceptor) {
     _dio.interceptors.remove(interceptor);
   }
   
-  /// 清理资源
+  /// Clean up resources
   void dispose() {
     cancelAllRequests();
     
-    // 取消所有缓存定时器
+    // Cancel all cache timers
     for (final timer in _cacheTimers.values) {
       timer.cancel();
     }
@@ -399,7 +415,7 @@ class NetworkExecutor {
     _cache.clear();
   }
   
-  /// 获取当前状态信息
+  /// Get current status information
   Map<String, dynamic> getStatus() {
     return {
       'pendingRequests': _pendingRequests.length,
@@ -409,7 +425,7 @@ class NetworkExecutor {
     };
   }
   
-  /// 执行文件下载请求
+  /// Execute file download request
   Future<NetworkResponse<T>> _executeDownloadRequest<T>(DownloadRequest<T> request) async {
     final requestKey = _getRequestKey(request);
     final completer = Completer<NetworkResponse<T>>();
@@ -419,29 +435,29 @@ class NetworkExecutor {
       request.onRequestStart();
       final startTime = DateTime.now();
       
-      // 检查保存路径是否存在，不存在则创建
+      // Check if save path exists, create if not
       final saveFile = File(request.savePath);
       final saveDir = saveFile.parent;
       if (!await saveDir.exists()) {
         await saveDir.create(recursive: true);
       }
       
-      // 检查文件是否已存在
+      // Check if file already exists
       if (await saveFile.exists() && !request.overwriteExisting) {
         final errorResponse = NetworkResponse<T>.error(
-          message: '文件已存在: ${request.savePath}',
+          message: 'File already exists: ${request.savePath}',
           statusCode: 409,
           errorCode: 'FILE_EXISTS',
         );
-        request.onDownloadError?.call('文件已存在');
+        request.onDownloadError?.call('File already exists');
         completer.complete(errorResponse);
         return errorResponse;
       }
       
-      // 构建请求选项
+      // Build request options
       final options = request.buildRequestOptions();
       
-      // 执行下载请求
+      // Execute download request
       final response = await _dio.download(
         options.path,
         request.savePath,
@@ -461,11 +477,11 @@ class NetworkExecutor {
       
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       
-      // 验证下载的文件
+      // Validate downloaded file
       if (await saveFile.exists()) {
         final fileSize = await saveFile.length();
         
-        // 解析响应
+        // Parse response
         final parsedData = request.parseResponse({
           'filePath': request.savePath,
           'fileSize': fileSize,
@@ -475,7 +491,7 @@ class NetworkExecutor {
         final networkResponse = NetworkResponse<T>.success(
           data: parsedData,
           statusCode: response.statusCode ?? 200,
-          message: '文件下载成功',
+          message: 'File download successful',
           headers: response.headers.map,
           duration: duration,
         );
@@ -486,25 +502,39 @@ class NetworkExecutor {
         
         return networkResponse;
       } else {
-        throw Exception('文件下载失败：文件未保存');
+        throw Exception('File download failed: file not saved');
       }
       
     } catch (error) {
-      NetworkException networkException;
+      // Use unified exception handling system
+      final unifiedException = await UnifiedExceptionHandler.instance.handleException(
+        error,
+        context: 'File download request',
+        metadata: {
+          'path': request.path,
+          'savePath': request.savePath,
+          'overwriteExisting': request.overwriteExisting,
+        },
+      );
       
+      // Try to use request's custom error handling
+      NetworkException? customException;
       if (error is DioException) {
-        networkException = request.handleError(error) ?? _handleDioError(error);
-      } else {
-        networkException = NetworkException(
-          message: error.toString(),
-          originalError: error,
-        );
+        customException = request.handleError(error);
       }
       
       final errorResponse = NetworkResponse<T>.error(
-        message: networkException.message,
-        statusCode: networkException.statusCode ?? -1,
-        errorCode: networkException.errorCode,
+        message: customException?.message ?? unifiedException.message,
+        statusCode: customException?.statusCode ?? unifiedException.statusCode,
+        errorCode: customException?.errorCode ?? unifiedException.code.name,
+      );
+      
+      // Create compatible NetworkException for callback
+      final networkException = NetworkException(
+        message: unifiedException.message,
+        statusCode: unifiedException.statusCode,
+        errorCode: unifiedException.code.name,
+        originalError: unifiedException.originalError,
       );
       
       request.onDownloadError?.call(networkException.message);

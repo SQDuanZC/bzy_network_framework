@@ -1,8 +1,8 @@
-/// 网络配置管理类
+/// Network configuration management class
 class NetworkConfig {
   static NetworkConfig? _instance;
   
-  /// 单例实例
+  /// Singleton instance
   static NetworkConfig get instance {
     _instance ??= NetworkConfig._internal();
     return _instance!;
@@ -10,70 +10,70 @@ class NetworkConfig {
   
   NetworkConfig._internal();
   
-  /// 基础URL
+  /// Base URL
   String _baseUrl = '';
   String get baseUrl => _baseUrl;
   
-  /// 连接超时时间（毫秒）
+  /// Connection timeout (milliseconds)
   int _connectTimeout = 30000;
   int get connectTimeout => _connectTimeout;
   
-  /// 接收超时时间（毫秒）
+  /// Receive timeout (milliseconds)
   int _receiveTimeout = 30000;
   int get receiveTimeout => _receiveTimeout;
   
-  /// 发送超时时间（毫秒）
+  /// Send timeout (milliseconds)
   int _sendTimeout = 30000;
   int get sendTimeout => _sendTimeout;
   
-  /// 默认请求头
+  /// Default request headers
   Map<String, dynamic> _defaultHeaders = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   };
   Map<String, dynamic> get defaultHeaders => Map.from(_defaultHeaders);
   
-  /// 重试配置
+  /// Retry configuration
   int _maxRetries = 3;
   int get maxRetries => _maxRetries;
   
-  /// 重试间隔（毫秒）
+  /// Retry delay (milliseconds)
   int _retryDelay = 1000;
   int get retryDelay => _retryDelay;
   
-  /// 是否启用日志
+  /// Whether to enable logging
   bool _enableLogging = true;
   bool get enableLogging => _enableLogging;
   
-  /// 日志级别
+  /// Log level
   LogLevel _logLevel = LogLevel.info;
   LogLevel get logLevel => _logLevel;
   
-  /// 缓存配置
+  /// Cache configuration
   bool _enableCache = true;
   bool get enableCache => _enableCache;
   
-  /// 默认缓存时长（秒）
+  /// Default cache duration (seconds)
   int _defaultCacheDuration = 300;
   int get defaultCacheDuration => _defaultCacheDuration;
   
-  /// 最大缓存大小（MB）
+  /// Maximum cache size (MB)
   int _maxCacheSize = 100;
   int get maxCacheSize => _maxCacheSize;
   
-  /// 环境配置
+  /// Environment configuration
   Environment _environment = Environment.development;
   Environment get environment => _environment;
   
-  /// 认证token
+  /// Authentication token
   String? _authToken;
   String? get authToken => _authToken;
   
-  /// 用户代理
+  /// User agent
   String _userAgent = 'Flutter Network Framework';
   String get userAgent => _userAgent;
   
-  /// 初始化配置
+  /// Initialize configuration
   void initialize({
     required String baseUrl,
     int? connectTimeout,
@@ -110,12 +110,12 @@ class NetworkConfig {
     if (userAgent != null) _userAgent = userAgent;
   }
   
-  /// 更新基础URL
+  /// Update base URL
   void updateBaseUrl(String baseUrl) {
     _baseUrl = baseUrl;
   }
   
-  /// 设置认证token
+  /// Set authentication token
   void setAuthToken(String? token) {
     _authToken = token;
     if (token != null) {
@@ -125,17 +125,17 @@ class NetworkConfig {
     }
   }
   
-  /// 添加默认请求头
+  /// Add default request header
   void addDefaultHeader(String key, String value) {
     _defaultHeaders[key] = value;
   }
   
-  /// 移除默认请求头
+  /// Remove default request header
   void removeDefaultHeader(String key) {
     _defaultHeaders.remove(key);
   }
   
-  /// 更新超时配置
+  /// Update timeout configuration
   void updateTimeouts({
     int? connectTimeout,
     int? receiveTimeout,
@@ -146,7 +146,7 @@ class NetworkConfig {
     if (sendTimeout != null) _sendTimeout = sendTimeout;
   }
   
-  /// 更新重试配置
+  /// Update retry configuration
   void updateRetryConfig({
     int? maxRetries,
     int? retryDelay,
@@ -155,7 +155,7 @@ class NetworkConfig {
     if (retryDelay != null) _retryDelay = retryDelay;
   }
   
-  /// 更新缓存配置
+  /// Update cache configuration
   void updateCacheConfig({
     bool? enableCache,
     int? defaultCacheDuration,
@@ -166,7 +166,7 @@ class NetworkConfig {
     if (maxCacheSize != null) _maxCacheSize = maxCacheSize;
   }
   
-  /// 更新日志配置
+  /// Update log configuration
   void updateLogConfig({
     bool? enableLogging,
     LogLevel? logLevel,
@@ -175,12 +175,12 @@ class NetworkConfig {
     if (logLevel != null) _logLevel = logLevel;
   }
   
-  /// 设置环境
+  /// Set environment
   void setEnvironment(Environment environment) {
     _environment = environment;
   }
   
-  /// 重置为默认配置
+  /// Reset to default configuration
   void reset() {
     _baseUrl = '';
     _connectTimeout = 30000;
@@ -202,7 +202,7 @@ class NetworkConfig {
     _userAgent = 'Flutter Network Framework';
   }
   
-  /// 获取完整的配置信息
+  /// Get complete configuration information
   Map<String, dynamic> toMap() {
     return {
       'baseUrl': _baseUrl,
@@ -234,7 +234,7 @@ class NetworkConfig {
   }
 }
 
-/// 日志级别枚举
+/// Log level enumeration
 enum LogLevel {
   none,
   error,
@@ -244,7 +244,7 @@ enum LogLevel {
   verbose,
 }
 
-/// 环境枚举
+/// Environment enumeration
 enum Environment {
   development,
   testing,
@@ -252,9 +252,9 @@ enum Environment {
   production,
 }
 
-/// 网络配置预设
+/// Network configuration presets
 class NetworkConfigPresets {
-  /// 开发环境配置
+  /// Development environment configuration
   static Map<String, dynamic> development = {
     'connectTimeout': 30000,
     'receiveTimeout': 30000,
@@ -268,7 +268,7 @@ class NetworkConfigPresets {
     'environment': Environment.development,
   };
   
-  /// 生产环境配置
+  /// Production environment configuration
   static Map<String, dynamic> production = {
     'connectTimeout': 15000,
     'receiveTimeout': 15000,
@@ -282,7 +282,7 @@ class NetworkConfigPresets {
     'environment': Environment.production,
   };
   
-  /// 测试环境配置
+  /// Testing environment configuration
   static Map<String, dynamic> testing = {
     'connectTimeout': 10000,
     'receiveTimeout': 10000,

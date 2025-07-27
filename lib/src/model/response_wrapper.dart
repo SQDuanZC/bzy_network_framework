@@ -1,5 +1,5 @@
-/// 统一响应数据结构封装
-/// 提供泛型支持，统一处理API响应格式
+/// Unified response data structure wrapper
+/// Provides generic support for unified API response format handling
 class BaseResponse<T> {
   final int code;
   final String message;
@@ -15,7 +15,7 @@ class BaseResponse<T> {
     this.timestamp,
   });
   
-  /// 从JSON创建响应对象
+  /// Create response object from JSON
   factory BaseResponse.fromJson(
     Map<String, dynamic> json,
     T Function(dynamic)? fromJsonT,
@@ -31,7 +31,7 @@ class BaseResponse<T> {
     );
   }
   
-  /// 转换为JSON
+  /// Convert to JSON
   Map<String, dynamic> toJson() {
     return {
       'code': code,
@@ -42,15 +42,15 @@ class BaseResponse<T> {
     };
   }
   
-  /// 判断请求是否成功
+  /// Check if request is successful
   static bool _isSuccess(int code) {
     return code == 200 || code == 0;
   }
   
-  /// 创建成功响应
+  /// Create success response
   factory BaseResponse.success({
     T? data,
-    String message = '请求成功',
+    String message = 'Request successful',
     int code = 200,
   }) {
     return BaseResponse<T>(
@@ -62,7 +62,7 @@ class BaseResponse<T> {
     );
   }
   
-  /// 创建失败响应
+  /// Create error response
   factory BaseResponse.error({
     required String message,
     int code = -1,
@@ -83,7 +83,7 @@ class BaseResponse<T> {
   }
 }
 
-/// 分页响应数据结构
+/// Paginated response data structure
 class PageResponse<T> {
   final List<T> list;
   final int total;
@@ -132,34 +132,6 @@ class PageResponse<T> {
   }
 }
 
-/// 网络异常类
-class NetworkException implements Exception {
-  final String message;
-  final int? code;
-  final dynamic data;
-  final NetworkErrorType type;
-  
-  const NetworkException({
-    required this.message,
-    this.code,
-    this.data,
-    this.type = NetworkErrorType.unknown,
-  });
-  
-  @override
-  String toString() {
-    return 'NetworkException{message: $message, code: $code, type: $type}';
-  }
-}
-
-/// 网络错误类型枚举
-enum NetworkErrorType {
-  timeout, // 超时
-  noNetwork, // 无网络连接
-  serverError, // 服务器错误
-  unauthorized, // 未授权
-  forbidden, // 禁止访问
-  notFound, // 资源未找到
-  parseError, // 解析错误
-  unknown, // 未知错误
-}
+// Network exception classes and error types have been moved to unified exception handling system
+// Please use UnifiedException, ExceptionType and ErrorCode
+// Import path: '../core/exception/unified_exception_handler.dart'

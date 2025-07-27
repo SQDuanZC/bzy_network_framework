@@ -1,14 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
-import '../model/response_wrapper.dart';
+import '../core/exception/unified_exception_handler.dart';
+import '../requests/base_network_request.dart';
 
-/// 网络工具类
-/// 提供网络状态检查、异常处理、响应解析等工具方法
+/// Network utility class
+/// Provides network status checking, exception handling, response parsing and other utility methods
 class NetworkUtils {
   NetworkUtils._();
   
-  /// 检查网络连接状态
+  /// Check network connection status
   static Future<bool> isNetworkAvailable() async {
     try {
       final result = await InternetAddress.lookup('google.com');
@@ -18,51 +19,51 @@ class NetworkUtils {
     }
   }
   
-  /// 判断异常类型
-  static NetworkErrorType getErrorType(dynamic error) {
+  /// Determine exception type
+  static ExceptionType getErrorType(dynamic error) {
     if (error is DioException) {
       switch (error.type) {
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.sendTimeout:
         case DioExceptionType.receiveTimeout:
-          return NetworkErrorType.timeout;
+          return ExceptionType.network;
         case DioExceptionType.connectionError:
-          return NetworkErrorType.noNetwork;
+          return ExceptionType.network;
         case DioExceptionType.badResponse:
           final statusCode = error.response?.statusCode;
           if (statusCode != null) {
-            if (statusCode == 401) return NetworkErrorType.unauthorized;
-            if (statusCode == 403) return NetworkErrorType.forbidden;
-            if (statusCode == 404) return NetworkErrorType.notFound;
-            if (statusCode >= 500) return NetworkErrorType.serverError;
+            if (statusCode == 401) return ExceptionType.auth;
+            if (statusCode == 403) return ExceptionType.auth;
+            if (statusCode == 404) return ExceptionType.client;
+            if (statusCode >= 500) return ExceptionType.server;
           }
-          return NetworkErrorType.serverError;
+          return ExceptionType.server;
         case DioExceptionType.cancel:
-          return NetworkErrorType.unknown;
+          return ExceptionType.operation;
         case DioExceptionType.unknown:
         default:
-          return NetworkErrorType.unknown;
+          return ExceptionType.unknown;
       }
     } else if (error is SocketException) {
-      return NetworkErrorType.noNetwork;
+      return ExceptionType.network;
     } else if (error is FormatException) {
-      return NetworkErrorType.parseError;
+      return ExceptionType.data;
     }
-    return NetworkErrorType.unknown;
+    return ExceptionType.unknown;
   }
   
-  /// 获取错误信息
+  /// Get error message
   static String getErrorMessage(dynamic error) {
     if (error is DioException) {
       switch (error.type) {
         case DioExceptionType.connectionTimeout:
-          return '连接超时，请检查网络设置';
+          return 'Connection timeout, please check network settings';
         case DioExceptionType.sendTimeout:
-          return '请求超时，请稍后重试';
+          return 'Request timeout, please try again later';
         case DioExceptionType.receiveTimeout:
-          return '响应超时，请稍后重试';
+          return 'Response timeout, please try again later';
         case DioExceptionType.connectionError:
-          return '网络连接失败，请检查网络设置';
+          return 'Network connection failed, please check network settings';
         case DioExceptionType.badResponse:
           final statusCode = error.response?.statusCode;
           final message = error.response?.data?['message'] ?? 
@@ -72,49 +73,76 @@ class NetworkUtils {
           if (statusCode != null) {
             switch (statusCode) {
               case 400:
-                return '请求参数错误';
+                return 'Invalid request parameters';
               case 401:
-                return '未授权，请重新登录';
+                return 'Unauthorized, please login again';
               case 403:
-                return '禁止访问';
+                return 'Access forbidden';
               case 404:
-                return '请求的资源不存在';
+                return 'Requested resource not found';
               case 500:
-                return '服务器内部错误';
+                return 'Internal server error';
               case 502:
-                return '网关错误';
+                return 'Gateway error';
               case 503:
-                return '服务不可用';
+                return 'Service unavailable';
               default:
-                return '请求失败（$statusCode）';
+                return 'Request failed ($statusCode)';
             }
           }
-          return '请求失败';
+          return 'Request failed';
         case DioExceptionType.cancel:
-          return '请求已取消';
+          return 'Request cancelled';
         case DioExceptionType.unknown:
         default:
-          return error.message ?? '未知错误';
+          return error.message ?? 'Unknown error';
       }
     } else if (error is SocketException) {
-      return '网络连接失败，请检查网络设置';
+      return 'Network connection failed, please check network settings';
     } else if (error is FormatException) {
-      return '数据解析失败';
+      return 'Data parsing failed';
     }
     return error.toString();
   }
   
-  /// 创建网络异常
+  /// Create network exception
   static NetworkException createNetworkException(dynamic error) {
     return NetworkException(
       message: getErrorMessage(error),
-      code: error is DioException ? error.response?.statusCode : null,
-      type: getErrorType(error),
-      data: error is DioException ? error.response?.data : null,
+      statusCode: error is DioException ? error.response?.statusCode : null,
+      errorCode: _getErrorCode(error),
+      originalError: error,
     );
   }
   
-  /// 安全解析JSON
+  /// Get error code
+  static String _getErrorCode(dynamic error) {
+    if (error is DioException) {
+      switch (error.type) {
+        case DioExceptionType.connectionTimeout:
+          return 'CONNECTION_TIMEOUT';
+        case DioExceptionType.sendTimeout:
+          return 'SEND_TIMEOUT';
+        case DioExceptionType.receiveTimeout:
+          return 'RECEIVE_TIMEOUT';
+        case DioExceptionType.connectionError:
+          return 'CONNECTION_ERROR';
+        case DioExceptionType.badResponse:
+          return 'BAD_RESPONSE';
+        case DioExceptionType.cancel:
+          return 'REQUEST_CANCELLED';
+        default:
+          return 'UNKNOWN_ERROR';
+      }
+    } else if (error is SocketException) {
+      return 'NETWORK_UNAVAILABLE';
+    } else if (error is FormatException) {
+      return 'PARSE_ERROR';
+    }
+    return 'UNKNOWN_ERROR';
+  }
+  
+  /// Safe JSON parsing
   static Map<String, dynamic>? safeParseJson(String? jsonString) {
     if (jsonString == null || jsonString.isEmpty) return null;
     
@@ -125,12 +153,12 @@ class NetworkUtils {
       }
       return null;
     } catch (e) {
-      // JSON解析失败，返回null
+      // JSON parsing failed, return null
       return null;
     }
   }
   
-  /// 脱敏处理敏感数据
+  /// Desensitize sensitive data
   static Map<String, dynamic> desensitizeData(Map<String, dynamic> data) {
     final sensitiveKeys = ['password', 'token', 'accessToken', 'refreshToken', 
                           'secret', 'key', 'authorization'];
@@ -151,7 +179,7 @@ class NetworkUtils {
   
 
   
-  /// 格式化文件大小
+  /// Format file size
   static String formatFileSize(int bytes) {
     if (bytes < 1024) return '${bytes}B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
@@ -161,19 +189,19 @@ class NetworkUtils {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
   }
   
-  /// 判断是否为幂等请求
+  /// Check if request is idempotent
   static bool isIdempotentRequest(String method) {
     final idempotentMethods = ['GET', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'];
     return idempotentMethods.contains(method.toUpperCase());
   }
   
-  /// 生成请求唯一标识
+  /// Generate unique request identifier
   static String generateRequestId(String path, [Map<String, dynamic>? queryParameters]) {
     final buffer = StringBuffer();
     buffer.write(path);
     
     if (queryParameters != null && queryParameters.isNotEmpty) {
-      // 对查询参数进行排序，确保相同参数生成相同ID
+      // Sort query parameters to ensure same parameters generate same ID
       final sortedKeys = queryParameters.keys.toList()..sort();
       buffer.write('?');
       
@@ -189,7 +217,7 @@ class NetworkUtils {
       }
     }
     
-    // 生成哈希作为唯一标识
+    // Generate hash as unique identifier
     final requestString = buffer.toString();
     return requestString.hashCode.toString();
   }
