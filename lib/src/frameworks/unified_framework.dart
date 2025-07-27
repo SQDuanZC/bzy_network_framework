@@ -1,0 +1,535 @@
+import 'dart:async';
+import 'package:dio/dio.dart';
+import '../requests/base_network_request.dart';
+import '../requests/network_executor.dart';
+import '../model/network_response.dart';
+import '../config/network_config.dart';
+import '../utils/network_logger.dart';
+
+/// 统一网络框架 - 插件化架构的核心入口点
+class UnifiedNetworkFramework {
+  static UnifiedNetworkFramework? _instance;
+  late NetworkExecutor _executor;
+  final Map<String, NetworkPlugin> _plugins = {};
+  final List<GlobalInterceptor> _globalInterceptors = [];
+  bool _isInitialized = false;
+  
+  /// 单例实例
+  static UnifiedNetworkFramework get instance {
+    _instance ??= UnifiedNetworkFramework._internal();
+    return _instance!;
+  }
+  
+  UnifiedNetworkFramework._internal() {
+    _executor = NetworkExecutor.instance;
+  }
+  
+  /// 初始化框架
+  Future<void> initialize({
+    required String baseUrl,
+    Map<String, dynamic>? config,
+    List<NetworkPlugin>? plugins,
+    List<GlobalInterceptor>? interceptors,
+  }) async {
+    if (_isInitialized) {
+      throw StateError('UnifiedNetworkFramework is already initialized');
+    }
+    
+    // 初始化网络配置
+    NetworkConfig.instance.initialize(
+      baseUrl: baseUrl,
+      connectTimeout: config?['connectTimeout'],
+      receiveTimeout: config?['receiveTimeout'],
+      sendTimeout: config?['sendTimeout'],
+      defaultHeaders: config?['defaultHeaders'],
+      maxRetries: config?['maxRetries'],
+      retryDelay: config?['retryDelay'],
+      enableLogging: config?['enableLogging'],
+      logLevel: config?['logLevel'],
+      enableCache: config?['enableCache'],
+      defaultCacheDuration: config?['defaultCacheDuration'],
+      maxCacheSize: config?['maxCacheSize'],
+      environment: config?['environment'],
+      authToken: config?['authToken'],
+      userAgent: config?['userAgent'],
+    );
+    
+    // 注册插件
+    if (plugins != null) {
+      for (final plugin in plugins) {
+        await registerPlugin(plugin);
+      }
+    }
+    
+    // 注册全局拦截器
+    if (interceptors != null) {
+      for (final interceptor in interceptors) {
+        registerGlobalInterceptor(interceptor);
+      }
+    }
+    
+    // 重新配置执行器
+    _executor.reconfigure();
+    
+    _isInitialized = true;
+  }
+  
+  /// 注册插件
+  Future<void> registerPlugin(NetworkPlugin plugin) async {
+    if (_plugins.containsKey(plugin.name)) {
+      throw ArgumentError('Plugin ${plugin.name} is already registered');
+    }
+    
+    await plugin.initialize();
+    _plugins[plugin.name] = plugin;
+    
+    // 注册插件的拦截器
+    for (final interceptor in plugin.interceptors) {
+      _executor.addInterceptor(interceptor);
+    }
+  }
+  
+  /// 注销插件
+  Future<void> unregisterPlugin(String pluginName) async {
+    final plugin = _plugins.remove(pluginName);
+    if (plugin != null) {
+      // 移除插件的拦截器
+      for (final interceptor in plugin.interceptors) {
+        _executor.removeInterceptor(interceptor);
+      }
+      
+      await plugin.dispose();
+    }
+  }
+  
+  /// 注册全局拦截器
+  void registerGlobalInterceptor(GlobalInterceptor interceptor) {
+    _globalInterceptors.add(interceptor);
+    _executor.addInterceptor(interceptor);
+  }
+  
+  /// 移除全局拦截器
+  void removeGlobalInterceptor(GlobalInterceptor interceptor) {
+    _globalInterceptors.remove(interceptor);
+    _executor.removeInterceptor(interceptor);
+  }
+  
+  /// 执行网络请求
+  Future<NetworkResponse<T>> execute<T>(BaseNetworkRequest<T> request) async {
+    _ensureInitialized();
+    
+    // 应用插件的请求预处理
+    for (final plugin in _plugins.values) {
+      await plugin.onRequestStart(request);
+    }
+    
+    try {
+      final response = await _executor.execute(request);
+      
+      // 应用插件的响应后处理
+      for (final plugin in _plugins.values) {
+        await plugin.onRequestComplete(request, response);
+      }
+      
+      return response;
+    } catch (error) {
+      // 应用插件的错误处理
+      for (final plugin in _plugins.values) {
+        await plugin.onRequestError(request, error);
+      }
+      rethrow;
+    }
+  }
+  
+  /// 批量执行请求
+  Future<List<NetworkResponse>> executeBatch(List<BaseNetworkRequest> requests) async {
+    _ensureInitialized();
+    return await _executor.executeBatch(requests);
+  }
+  
+  /// 并发执行请求
+  Future<List<NetworkResponse>> executeConcurrent(
+    List<BaseNetworkRequest> requests, {
+    int maxConcurrency = 3,
+  }) async {
+    _ensureInitialized();
+    return await _executor.executeConcurrent(requests, maxConcurrency: maxConcurrency);
+  }
+  
+  /// 取消请求
+  void cancelRequest(BaseNetworkRequest request) {
+    _executor.cancelRequest(request);
+  }
+  
+  /// 取消所有请求
+  void cancelAllRequests() {
+    _executor.cancelAllRequests();
+  }
+  
+  /// 更新配置
+  void updateConfig(Map<String, dynamic> config) {
+    final networkConfig = NetworkConfig.instance;
+    
+    if (config.containsKey('baseUrl')) {
+      networkConfig.updateBaseUrl(config['baseUrl']);
+    }
+    
+    if (config.containsKey('authToken')) {
+      networkConfig.setAuthToken(config['authToken']);
+    }
+    
+    if (config.containsKey('timeouts')) {
+      final timeouts = config['timeouts'] as Map<String, dynamic>;
+      networkConfig.updateTimeouts(
+        connectTimeout: timeouts['connectTimeout'],
+        receiveTimeout: timeouts['receiveTimeout'],
+        sendTimeout: timeouts['sendTimeout'],
+      );
+    }
+    
+    if (config.containsKey('retry')) {
+      final retry = config['retry'] as Map<String, dynamic>;
+      networkConfig.updateRetryConfig(
+        maxRetries: retry['maxRetries'],
+        retryDelay: retry['retryDelay'],
+      );
+    }
+    
+    if (config.containsKey('cache')) {
+      final cache = config['cache'] as Map<String, dynamic>;
+      networkConfig.updateCacheConfig(
+        enableCache: cache['enableCache'],
+        defaultCacheDuration: cache['defaultCacheDuration'],
+        maxCacheSize: cache['maxCacheSize'],
+      );
+    }
+    
+    if (config.containsKey('logging')) {
+      final logging = config['logging'] as Map<String, dynamic>;
+      networkConfig.updateLogConfig(
+        enableLogging: logging['enableLogging'],
+        logLevel: logging['logLevel'],
+      );
+    }
+    
+    // 重新配置执行器
+    _executor.reconfigure();
+  }
+  
+  /// 获取插件
+  T? getPlugin<T extends NetworkPlugin>(String name) {
+    return _plugins[name] as T?;
+  }
+  
+  /// 获取所有插件
+  List<NetworkPlugin> get plugins => _plugins.values.toList();
+  
+  /// 获取框架状态
+  Map<String, dynamic> getStatus() {
+    return {
+      'isInitialized': _isInitialized,
+      'pluginsCount': _plugins.length,
+      'globalInterceptorsCount': _globalInterceptors.length,
+      'executor': _executor.getStatus(),
+      'config': NetworkConfig.instance.toMap(),
+    };
+  }
+  
+  /// 清理资源
+  Future<void> dispose() async {
+    // 注销所有插件
+    for (final pluginName in _plugins.keys.toList()) {
+      await unregisterPlugin(pluginName);
+    }
+    
+    // 清理全局拦截器
+    _globalInterceptors.clear();
+    
+    // 清理执行器
+    _executor.dispose();
+    
+    // 重置配置
+    NetworkConfig.instance.reset();
+    
+    _isInitialized = false;
+  }
+  
+  /// 确保框架已初始化
+  void _ensureInitialized() {
+    if (!_isInitialized) {
+      throw StateError('UnifiedNetworkFramework is not initialized. Call initialize() first.');
+    }
+  }
+}
+
+/// 网络插件基类
+abstract class NetworkPlugin {
+  /// 插件名称
+  String get name;
+  
+  /// 插件版本
+  String get version;
+  
+  /// 插件描述
+  String get description;
+  
+  /// 插件拦截器
+  List<Interceptor> get interceptors => [];
+  
+  /// 初始化插件
+  Future<void> initialize();
+  
+  /// 请求开始时调用
+  Future<void> onRequestStart(BaseNetworkRequest request) async {}
+  
+  /// 请求完成时调用
+  Future<void> onRequestComplete(BaseNetworkRequest request, NetworkResponse response) async {}
+  
+  /// 请求错误时调用
+  Future<void> onRequestError(BaseNetworkRequest request, dynamic error) async {}
+  
+  /// 清理插件资源
+  Future<void> dispose();
+}
+
+/// 全局拦截器类型定义
+typedef GlobalInterceptor = Interceptor;
+
+/// 预定义的插件工厂
+class NetworkPluginFactory {
+  /// 创建认证插件
+  static AuthPlugin createAuthPlugin({
+    required String Function() getToken,
+    String tokenType = 'Bearer',
+    String headerName = 'Authorization',
+  }) {
+    return AuthPlugin(
+      getToken: getToken,
+      tokenType: tokenType,
+      headerName: headerName,
+    );
+  }
+  
+  /// 创建缓存插件
+  static CachePlugin createCachePlugin({
+    int maxSize = 100,
+    Duration defaultDuration = const Duration(minutes: 5),
+  }) {
+    return CachePlugin(
+      maxSize: maxSize,
+      defaultDuration: defaultDuration,
+    );
+  }
+  
+  /// 创建重试插件
+  static RetryPlugin createRetryPlugin({
+    int maxRetries = 3,
+    Duration delay = const Duration(seconds: 1),
+    bool Function(DioException)? shouldRetry,
+  }) {
+    return RetryPlugin(
+      maxRetries: maxRetries,
+      delay: delay,
+      shouldRetry: shouldRetry,
+    );
+  }
+  
+  /// 创建日志插件
+  static LoggingPlugin createLoggingPlugin({
+    bool logRequest = true,
+    bool logResponse = true,
+    bool logError = true,
+  }) {
+    return LoggingPlugin(
+      logRequest: logRequest,
+      logResponse: logResponse,
+      logError: logError,
+    );
+  }
+}
+
+/// 认证插件
+class AuthPlugin extends NetworkPlugin {
+  final String Function() getToken;
+  final String tokenType;
+  final String headerName;
+  
+  AuthPlugin({
+    required this.getToken,
+    this.tokenType = 'Bearer',
+    this.headerName = 'Authorization',
+  });
+  
+  @override
+  String get name => 'auth';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => 'Authentication plugin for automatic token management';
+  
+  @override
+  List<Interceptor> get interceptors => [_AuthInterceptor(this)];
+  
+  @override
+  Future<void> initialize() async {
+    // 认证插件初始化逻辑
+  }
+  
+  @override
+  Future<void> dispose() async {
+    // 清理认证相关资源
+  }
+}
+
+class _AuthInterceptor extends Interceptor {
+  final AuthPlugin plugin;
+  
+  _AuthInterceptor(this.plugin);
+  
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    try {
+      final token = plugin.getToken();
+      if (token.isNotEmpty) {
+        options.headers[plugin.headerName] = '${plugin.tokenType} $token';
+      }
+    } catch (e) {
+      // 忽略token获取错误
+    }
+    handler.next(options);
+  }
+}
+
+/// 缓存插件
+class CachePlugin extends NetworkPlugin {
+  final int maxSize;
+  final Duration defaultDuration;
+  
+  CachePlugin({
+    required this.maxSize,
+    required this.defaultDuration,
+  });
+  
+  @override
+  String get name => 'cache';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => 'Caching plugin for response caching';
+  
+  @override
+  Future<void> initialize() async {
+    // 缓存插件初始化逻辑
+  }
+  
+  @override
+  Future<void> dispose() async {
+    // 清理缓存资源
+  }
+}
+
+/// 重试插件
+class RetryPlugin extends NetworkPlugin {
+  final int maxRetries;
+  final Duration delay;
+  final bool Function(DioException)? shouldRetry;
+  
+  RetryPlugin({
+    required this.maxRetries,
+    required this.delay,
+    this.shouldRetry,
+  });
+  
+  @override
+  String get name => 'retry';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => 'Retry plugin for automatic request retrying';
+  
+  @override
+  Future<void> initialize() async {
+    // 重试插件初始化逻辑
+  }
+  
+  @override
+  Future<void> dispose() async {
+    // 清理重试相关资源
+  }
+}
+
+/// 日志插件
+class LoggingPlugin extends NetworkPlugin {
+  final bool logRequest;
+  final bool logResponse;
+  final bool logError;
+  
+  LoggingPlugin({
+    required this.logRequest,
+    required this.logResponse,
+    required this.logError,
+  });
+  
+  @override
+  String get name => 'logging';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => 'Logging plugin for request/response logging';
+  
+  @override
+  List<Interceptor> get interceptors => [_LoggingInterceptor(this)];
+  
+  @override
+  Future<void> initialize() async {
+    // 日志插件初始化逻辑
+  }
+  
+  @override
+  Future<void> dispose() async {
+    // 清理日志相关资源
+  }
+}
+
+class _LoggingInterceptor extends Interceptor {
+  final LoggingPlugin plugin;
+  
+  _LoggingInterceptor(this.plugin);
+  
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (plugin.logRequest) {
+      NetworkLogger.general.info('🚀 REQUEST: ${options.method} ${options.uri}');
+      if (options.data != null) {
+        NetworkLogger.general.info('📤 DATA: ${options.data}');
+      }
+    }
+    handler.next(options);
+  }
+  
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    if (plugin.logResponse) {
+      NetworkLogger.general.info('✅ RESPONSE: ${response.statusCode} ${response.requestOptions.uri}');
+      NetworkLogger.general.info('📥 DATA: ${response.data}');
+    }
+    handler.next(response);
+  }
+  
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    if (plugin.logError) {
+      NetworkLogger.general.warning('❌ ERROR: ${err.message}');
+      NetworkLogger.general.warning('🔍 DETAILS: ${err.response?.data}');
+    }
+    handler.next(err);
+  }
+}
