@@ -66,8 +66,7 @@ class TestApiRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   @override
   HttpMethod get method => requestMethod;
   
-  @override
-  Map<String, dynamic>? get data => requestData;
+
   
   @override
   Map<String, dynamic> parseResponse(dynamic data) {

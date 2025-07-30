@@ -83,54 +83,7 @@ class BaseResponse<T> {
   }
 }
 
-/// Paginated response data structure
-class PageResponse<T> {
-  final List<T> list;
-  final int total;
-  final int page;
-  final int pageSize;
-  final bool hasMore;
-  
-  const PageResponse({
-    required this.list,
-    required this.total,
-    required this.page,
-    required this.pageSize,
-    required this.hasMore,
-  });
-  
-  factory PageResponse.fromJson(
-    Map<String, dynamic> json,
-    T Function(Map<String, dynamic>) fromJsonT,
-  ) {
-    final List<dynamic> listData = json['list'] ?? json['data'] ?? [];
-    final List<T> items = listData
-        .map((item) => fromJsonT(item as Map<String, dynamic>))
-        .toList();
-    
-    final int total = json['total'] ?? 0;
-    final int page = json['page'] ?? json['current'] ?? 1;
-    final int pageSize = json['pageSize'] ?? json['size'] ?? 10;
-    
-    return PageResponse<T>(
-      list: items,
-      total: total,
-      page: page,
-      pageSize: pageSize,
-      hasMore: (page * pageSize) < total,
-    );
-  }
-  
-  Map<String, dynamic> toJson() {
-    return {
-      'list': list,
-      'total': total,
-      'page': page,
-      'pageSize': pageSize,
-      'hasMore': hasMore,
-    };
-  }
-}
+
 
 // Network exception classes and error types have been moved to unified exception handling system
 // Please use UnifiedException, ExceptionType and ErrorCode

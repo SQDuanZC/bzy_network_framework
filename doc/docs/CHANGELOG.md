@@ -1,5 +1,31 @@
 # 网络框架更新日志
 
+## [v1.0.1] - 2025年1月
+
+### 🔄 统一 queryParameters 方案
+
+#### 核心功能实现
+- **新增**: 统一使用 `queryParameters` 处理所有 HTTP 请求数据
+- **自动转换**: GET/DELETE 请求自动作为 URL 参数，POST/PUT/PATCH 请求自动转换为请求体
+- **调试增强**: 自动保存原始请求数据，便于调试和日志记录
+
+#### 代码改进
+- **修改**: `BaseNetworkRequest.buildRequestOptions` 方法，实现自动数据转换逻辑
+- **修改**: `UnifiedNetworkFramework.execute` 方法，更新原始数据保存逻辑
+- **新增**: `_getEffectiveRequestData` 辅助方法，确定实际发送的数据
+
+#### 文档和示例
+- **新增**: `unified_query_parameters.md` 详细文档
+- **新增**: `unified_query_parameters_example.dart` 示例代码
+- **演示**: GET、POST、PUT、DELETE 请求的统一处理方式
+
+#### 测试验证
+- **验证**: 所有请求类型均成功执行
+- **确认**: 数据转换和原始数据保存功能正常
+- **测试**: 统一接口的类型安全性和向后兼容性
+
+---
+
 ## [v2.2.1] - 2025年1月
 
 ### 🌐 国际化改进

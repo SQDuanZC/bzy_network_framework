@@ -383,7 +383,7 @@ class NetworkExecutor {
   
   /// Get request unique key
   String _getRequestKey(BaseNetworkRequest request) {
-    return '${request.method}:${request.path}:${request.queryParameters?.toString() ?? ''}:${request.data?.toString() ?? ''}';
+    return '${request.method}:${request.path}:${request.queryParameters?.toString() ?? ''}';
   }
   
   /// Reconfigure Dio

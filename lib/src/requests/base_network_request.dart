@@ -19,6 +19,9 @@ enum HttpMethod {
 
 /// Base network request class - Core implementation of "every network request is an object"
 abstract class BaseNetworkRequest<T> {
+  /// Private field to store original request data
+  dynamic _originalRequestData;
+  
   /// Request path
   String get path;
   
@@ -28,11 +31,19 @@ abstract class BaseNetworkRequest<T> {
   /// Request parameters
   Map<String, dynamic>? get queryParameters => null;
   
-  /// Request body data
-  dynamic get data => null;
-  
   /// Request headers
   Map<String, dynamic>? get headers => null;
+
+  /// Request data (for POST/PUT/PATCH requests)
+  dynamic get data => null;
+  
+  /// Get original request data
+  dynamic get originalRequestData => _originalRequestData;
+  
+  /// Set original request data (internal use)
+  void setOriginalRequestData(dynamic data) {
+    _originalRequestData = data;
+  }
   
   /// Timeout duration (milliseconds)
   int? get timeout => null;
@@ -76,15 +87,40 @@ abstract class BaseNetworkRequest<T> {
   /// Request failure processing
   void onRequestError(NetworkException error) {}
   
-  /// Get complete request options
+  /// Get complete request options with automatic data conversion
   RequestOptions buildRequestOptions() {
     final config = NetworkConfig.instance;
+    
+    // Handle data based on HTTP method - prioritize data over queryParameters
+    dynamic finalData;
+    Map<String, dynamic>? finalQueryParams;
+
+    if (method == HttpMethod.get || method == HttpMethod.delete) {
+      // For GET/DELETE requests, use queryParameters as URL params
+      finalData = null;
+      finalQueryParams = queryParameters;
+    } else {
+      // For POST/PUT/PATCH requests, prioritize data over queryParameters
+      if (data != null) {
+        // Use data if available (important for file uploads, FormData, etc.)
+        finalData = data;
+        finalQueryParams = null;
+      } else if (queryParameters != null && queryParameters!.isNotEmpty) {
+        // Fallback to queryParameters as body if data is null
+        finalData = queryParameters;
+        finalQueryParams = null;
+      } else {
+        // Both are null
+        finalData = null;
+        finalQueryParams = null;
+      }
+    }
     
     return RequestOptions(
       path: path,
       method: method.value,
-      queryParameters: queryParameters,
-      data: data,
+      queryParameters: finalQueryParams,
+      data: finalData,
       headers: {
         ...?headers,
       },

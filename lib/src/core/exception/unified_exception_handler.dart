@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../utils/network_logger.dart';
 
-/// 统一异常处理系统
-/// 提供统一的异常分类、错误码定义和异常处理机制
+/// Unified exception handling system
+/// Provides unified exception classification, error code definition and exception handling mechanism
 class UnifiedExceptionHandler {
   static UnifiedExceptionHandler? _instance;
   
-  /// 单例实例
+  /// Singleton instance
   static UnifiedExceptionHandler get instance {
     _instance ??= UnifiedExceptionHandler._internal();
     return _instance!;
@@ -16,23 +16,23 @@ class UnifiedExceptionHandler {
   
   UnifiedExceptionHandler._internal();
   
-  /// 全局异常处理器列表
+  /// Global exception handler list
   final List<GlobalExceptionHandler> _globalHandlers = [];
   
-  /// 异常统计
+  /// Exception statistics
   final Map<String, int> _exceptionStats = {};
   
-  /// 注册全局异常处理器
+  /// Register global exception handler
   void registerGlobalHandler(GlobalExceptionHandler handler) {
     _globalHandlers.add(handler);
   }
   
-  /// 移除全局异常处理器
+  /// Remove global exception handler
   void removeGlobalHandler(GlobalExceptionHandler handler) {
     _globalHandlers.remove(handler);
   }
   
-  /// 处理异常
+  /// Handle exception
   Future<UnifiedException> handleException(dynamic error, {
     String? context,
     Map<String, dynamic>? metadata,
@@ -53,7 +53,7 @@ class UnifiedExceptionHandler {
       unifiedException = _handleGenericException(error);
     }
     
-    // 添加上下文信息
+    // Add context information
     if (context != null) {
       unifiedException = unifiedException.copyWith(
         context: context,
@@ -61,53 +61,53 @@ class UnifiedExceptionHandler {
       );
     }
     
-    // 记录异常统计
+    // Record exception statistics
     _recordExceptionStats(unifiedException);
     
-    // 调用全局异常处理器
+    // Call global exception handlers
     for (final handler in _globalHandlers) {
       try {
         await handler.onException(unifiedException);
       } catch (e) {
-        NetworkLogger.general.warning('全局异常处理器执行失败: $e');
+        NetworkLogger.general.warning('Global exception handler execution failed: $e');
       }
     }
     
-    // 记录异常日志
+    // Log exception
     _logException(unifiedException);
     
     return unifiedException;
   }
   
-  /// 处理 Dio 异常
+  /// Handle Dio exception
   UnifiedException _handleDioException(DioException error) {
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
-        return UnifiedException(
-          type: ExceptionType.network,
-          code: ErrorCode.connectionTimeout,
-          message: '连接超时，请检查网络连接',
-          originalError: error,
-          statusCode: -1001,
-        );
+          return UnifiedException(
+            type: ExceptionType.network,
+            code: ErrorCode.connectionTimeout,
+            message: error.message ?? 'Connection timeout, please check network connection',
+            originalError: error,
+            statusCode: -1001,
+          );
         
       case DioExceptionType.sendTimeout:
-        return UnifiedException(
-          type: ExceptionType.network,
-          code: ErrorCode.sendTimeout,
-          message: '发送超时，请稍后重试',
-          originalError: error,
-          statusCode: -1002,
-        );
+          return UnifiedException(
+            type: ExceptionType.network,
+            code: ErrorCode.sendTimeout,
+            message: error.message ?? 'Send timeout, please try again later',
+            originalError: error,
+            statusCode: -1002,
+          );
         
       case DioExceptionType.receiveTimeout:
-        return UnifiedException(
-          type: ExceptionType.network,
-          code: ErrorCode.receiveTimeout,
-          message: '接收超时，请稍后重试',
-          originalError: error,
-          statusCode: -1003,
-        );
+          return UnifiedException(
+            type: ExceptionType.network,
+            code: ErrorCode.receiveTimeout,
+            message: error.message ?? 'Receive timeout, please try again later',
+            originalError: error,
+            statusCode: -1003,
+          );
         
       case DioExceptionType.badResponse:
         final statusCode = error.response?.statusCode ?? -1;
@@ -117,7 +117,7 @@ class UnifiedExceptionHandler {
         return UnifiedException(
           type: ExceptionType.operation,
           code: ErrorCode.requestCancelled,
-          message: '请求已取消',
+          message: error.message ?? 'Request cancelled',
           originalError: error,
           statusCode: -1999,
         );
@@ -126,7 +126,7 @@ class UnifiedExceptionHandler {
         return UnifiedException(
           type: ExceptionType.network,
           code: ErrorCode.connectionError,
-          message: '网络连接错误，请检查网络设置',
+          message: error.message ?? 'Network connection error, please check network settings',
           originalError: error,
           statusCode: -1004,
         );
@@ -135,102 +135,102 @@ class UnifiedExceptionHandler {
         return UnifiedException(
           type: ExceptionType.unknown,
           code: ErrorCode.unknownError,
-          message: error.message ?? '未知网络错误',
+          message: error.message ?? 'Unknown network error',
           originalError: error,
           statusCode: -1000,
         );
     }
   }
   
-  /// 处理 HTTP 状态码
+  /// Handle HTTP status code
   UnifiedException _handleHttpStatusCode(int statusCode, DioException error) {
     switch (statusCode) {
       case 400:
-        return UnifiedException(
-          type: ExceptionType.client,
-          code: ErrorCode.badRequest,
-          message: '请求参数错误',
-          originalError: error,
-          statusCode: statusCode,
-        );
+          return UnifiedException(
+            type: ExceptionType.client,
+            code: ErrorCode.badRequest,
+            message: error.message ?? 'Bad request parameters',
+            originalError: error,
+            statusCode: statusCode,
+          );
         
       case 401:
-        return UnifiedException(
-          type: ExceptionType.auth,
-          code: ErrorCode.unauthorized,
-          message: '认证失败，请重新登录',
-          originalError: error,
-          statusCode: statusCode,
-        );
+          return UnifiedException(
+            type: ExceptionType.auth,
+            code: ErrorCode.unauthorized,
+            message: error.message ?? 'Authentication failed, please login again',
+            originalError: error,
+            statusCode: statusCode,
+          );
         
       case 403:
-        return UnifiedException(
-          type: ExceptionType.auth,
-          code: ErrorCode.forbidden,
-          message: '权限不足，无法访问',
-          originalError: error,
-          statusCode: statusCode,
-        );
+          return UnifiedException(
+            type: ExceptionType.auth,
+            code: ErrorCode.forbidden,
+            message: error.message ?? 'Insufficient permissions, access denied',
+            originalError: error,
+            statusCode: statusCode,
+          );
         
       case 404:
-        return UnifiedException(
-          type: ExceptionType.client,
-          code: ErrorCode.notFound,
-          message: '请求的资源不存在',
-          originalError: error,
-          statusCode: statusCode,
-        );
+          return UnifiedException(
+            type: ExceptionType.client,
+            code: ErrorCode.notFound,
+            message: error.message ?? 'Requested resource not found',
+            originalError: error,
+            statusCode: statusCode,
+          );
         
       case 408:
-        return UnifiedException(
-          type: ExceptionType.network,
-          code: ErrorCode.requestTimeout,
-          message: '请求超时，请稍后重试',
-          originalError: error,
-          statusCode: statusCode,
-        );
+          return UnifiedException(
+            type: ExceptionType.network,
+            code: ErrorCode.requestTimeout,
+            message: error.message ?? 'Request timeout, please try again later',
+            originalError: error,
+            statusCode: statusCode,
+          );
         
       case 429:
-        return UnifiedException(
-          type: ExceptionType.client,
-          code: ErrorCode.tooManyRequests,
-          message: '请求过于频繁，请稍后重试',
-          originalError: error,
-          statusCode: statusCode,
-        );
+          return UnifiedException(
+            type: ExceptionType.client,
+            code: ErrorCode.tooManyRequests,
+            message: error.message ?? 'Too many requests, please try again later',
+            originalError: error,
+            statusCode: statusCode,
+          );
         
       case 500:
-        return UnifiedException(
-          type: ExceptionType.server,
-          code: ErrorCode.internalServerError,
-          message: '服务器内部错误',
-          originalError: error,
-          statusCode: statusCode,
-        );
+          return UnifiedException(
+            type: ExceptionType.server,
+            code: ErrorCode.internalServerError,
+            message: error.message ?? 'Internal server error',
+            originalError: error,
+            statusCode: statusCode,
+          );
         
       case 502:
-        return UnifiedException(
-          type: ExceptionType.server,
-          code: ErrorCode.badGateway,
-          message: '网关错误',
-          originalError: error,
-          statusCode: statusCode,
-        );
+          return UnifiedException(
+            type: ExceptionType.server,
+            code: ErrorCode.badGateway,
+            message: error.message ?? 'Gateway error',
+            originalError: error,
+            statusCode: statusCode,
+          );
         
       case 503:
-        return UnifiedException(
-          type: ExceptionType.server,
-          code: ErrorCode.serviceUnavailable,
-          message: '服务暂时不可用',
-          originalError: error,
-          statusCode: statusCode,
-        );
+          return UnifiedException(
+            type: ExceptionType.server,
+            code: ErrorCode.serviceUnavailable,
+            message: error.message ?? 'Service temporarily unavailable',
+            originalError: error,
+            statusCode: statusCode,
+          );
         
       case 504:
         return UnifiedException(
           type: ExceptionType.server,
           code: ErrorCode.gatewayTimeout,
-          message: '网关超时',
+          message: error.message ?? 'Gateway timeout',
           originalError: error,
           statusCode: statusCode,
         );
@@ -240,7 +240,7 @@ class UnifiedExceptionHandler {
           return UnifiedException(
             type: ExceptionType.client,
             code: ErrorCode.clientError,
-            message: '客户端错误 ($statusCode)',
+            message: error.message ?? 'Client error ($statusCode)',
             originalError: error,
             statusCode: statusCode,
           );
@@ -248,7 +248,7 @@ class UnifiedExceptionHandler {
           return UnifiedException(
             type: ExceptionType.server,
             code: ErrorCode.serverError,
-            message: '服务器错误 ($statusCode)',
+            message: error.message ?? 'Server error ($statusCode)',
             originalError: error,
             statusCode: statusCode,
           );
@@ -256,7 +256,7 @@ class UnifiedExceptionHandler {
           return UnifiedException(
             type: ExceptionType.unknown,
             code: ErrorCode.unknownError,
-            message: '未知HTTP错误 ($statusCode)',
+            message: error.message ?? 'Unknown HTTP error ($statusCode)',
             originalError: error,
             statusCode: statusCode,
           );
@@ -264,40 +264,40 @@ class UnifiedExceptionHandler {
     }
   }
   
-  /// 处理 Socket 异常
+  /// Handle Socket exception
   UnifiedException _handleSocketException(SocketException error) {
     return UnifiedException(
       type: ExceptionType.network,
       code: ErrorCode.networkUnavailable,
-      message: '网络不可用，请检查网络连接',
+      message: error.message ?? 'Network unavailable, please check network connection',
       originalError: error,
       statusCode: -2001,
     );
   }
   
-  /// 处理超时异常
+  /// Handle timeout exception
   UnifiedException _handleTimeoutException(TimeoutException error) {
     return UnifiedException(
       type: ExceptionType.network,
       code: ErrorCode.operationTimeout,
-      message: '操作超时，请稍后重试',
+      message: error.message ?? 'Operation timeout, please try again later',
       originalError: error,
       statusCode: -2002,
     );
   }
   
-  /// 处理格式异常
+  /// Handle format exception
   UnifiedException _handleFormatException(FormatException error) {
     return UnifiedException(
       type: ExceptionType.data,
       code: ErrorCode.parseError,
-      message: '数据解析失败',
+      message: error.message ?? 'Data format error',
       originalError: error,
       statusCode: -3001,
     );
   }
   
-  /// 处理通用异常
+  /// Handle generic exception
   UnifiedException _handleGenericException(dynamic error) {
     return UnifiedException(
       type: ExceptionType.unknown,
@@ -308,19 +308,19 @@ class UnifiedExceptionHandler {
     );
   }
   
-  /// 记录异常统计
+  /// Record exception statistics
   void _recordExceptionStats(UnifiedException exception) {
     final key = '${exception.type.name}_${exception.code.name}';
     _exceptionStats[key] = (_exceptionStats[key] ?? 0) + 1;
   }
   
-  /// 记录异常日志
+  /// Log exception
   void _logException(UnifiedException exception) {
     final level = _getLogLevel(exception.type);
-    final message = '异常处理: ${exception.message} '
-        '(类型: ${exception.type.name}, '
-        '错误码: ${exception.code.name}, '
-        '状态码: ${exception.statusCode})';
+    final message = 'Exception handling: ${exception.message} '
+        '(Type: ${exception.type.name}, '
+        'Error code: ${exception.code.name}, '
+        'Status code: ${exception.statusCode})';
     
     switch (level) {
       case LogLevel.severe:
@@ -335,7 +335,7 @@ class UnifiedExceptionHandler {
     }
   }
   
-  /// 获取日志级别
+  /// Get log level
   LogLevel _getLogLevel(ExceptionType type) {
     switch (type) {
       case ExceptionType.server:
@@ -351,24 +351,24 @@ class UnifiedExceptionHandler {
     }
   }
   
-  /// 获取异常统计
+  /// Get exception statistics
   Map<String, int> getExceptionStats() {
     return Map.unmodifiable(_exceptionStats);
   }
   
-  /// 清空异常统计
+  /// Clear exception statistics
   void clearExceptionStats() {
     _exceptionStats.clear();
   }
   
-  /// 重置异常处理器
+  /// Reset exception handler
   void reset() {
     _globalHandlers.clear();
     _exceptionStats.clear();
   }
 }
 
-/// 统一异常类
+/// Unified exception class
 class UnifiedException implements Exception {
   final ExceptionType type;
   final ErrorCode code;
@@ -390,7 +390,7 @@ class UnifiedException implements Exception {
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
   
-  /// 复制并修改异常
+  /// Copy and modify exception
   UnifiedException copyWith({
     ExceptionType? type,
     ErrorCode? code,
@@ -413,19 +413,19 @@ class UnifiedException implements Exception {
     );
   }
   
-  /// 是否为网络相关异常
+  /// Whether it is a network-related exception
   bool get isNetworkError => type == ExceptionType.network;
   
-  /// 是否为认证相关异常
+  /// Whether it is an authentication-related exception
   bool get isAuthError => type == ExceptionType.auth;
   
-  /// 是否为服务器异常
+  /// Whether it is a server exception
   bool get isServerError => type == ExceptionType.server;
   
-  /// 是否为客户端异常
+  /// Whether it is a client exception
   bool get isClientError => type == ExceptionType.client;
   
-  /// 是否可重试
+  /// Whether it is retryable
   bool get isRetryable {
     switch (type) {
       case ExceptionType.network:
@@ -452,20 +452,20 @@ class UnifiedException implements Exception {
   }
 }
 
-/// 异常类型枚举
+/// Exception type enumeration
 enum ExceptionType {
-  network,    // 网络异常
-  server,     // 服务器异常
-  client,     // 客户端异常
-  auth,       // 认证异常
-  data,       // 数据异常
-  operation,  // 操作异常
-  unknown,    // 未知异常
+  network,    // Network exception
+  server,     // Server exception
+  client,     // Client exception
+  auth,       // Authentication exception
+  data,       // Data exception
+  operation,  // Operation exception
+  unknown,    // Unknown exception
 }
 
-/// 错误码枚举
+/// Error code enumeration
 enum ErrorCode {
-  // 网络相关错误码 (1000-1999)
+  // Network related error codes (1000-1999)
   connectionTimeout,
   sendTimeout,
   receiveTimeout,
@@ -474,63 +474,63 @@ enum ErrorCode {
   requestTimeout,
   operationTimeout,
   
-  // 认证相关错误码 (2000-2999)
+  // Authentication related error codes (2000-2999)
   unauthorized,
   forbidden,
   tokenExpired,
   tokenInvalid,
   
-  // 客户端错误码 (3000-3999)
+  // Client error codes (3000-3999)
   badRequest,
   notFound,
   methodNotAllowed,
   tooManyRequests,
   clientError,
   
-  // 服务器错误码 (4000-4999)
+  // Server error codes (4000-4999)
   internalServerError,
   badGateway,
   serviceUnavailable,
   gatewayTimeout,
   serverError,
   
-  // 数据相关错误码 (5000-5999)
+  // Data related error codes (5000-5999)
   parseError,
   validationError,
   dataCorrupted,
   
-  // 操作相关错误码 (6000-6999)
+  // Operation related error codes (6000-6999)
   requestCancelled,
   operationFailed,
   resourceBusy,
   
-  // 未知错误码 (9000-9999)
+  // Unknown error codes (9000-9999)
   unknownError,
 }
 
-/// 全局异常处理器接口
+/// Global exception handler interface
 abstract class GlobalExceptionHandler {
-  /// 处理异常
+  /// Handle exception
   Future<void> onException(UnifiedException exception);
 }
 
-/// 日志级别枚举
+/// Log level enumeration
 enum LogLevel {
   info,
   warning,
   severe,
 }
 
-/// 默认的全局异常处理器
+/// Default global exception handler
 class DefaultGlobalExceptionHandler implements GlobalExceptionHandler {
   @override
   Future<void> onException(UnifiedException exception) async {
-    // 可以在这里实现默认的全局异常处理逻辑
-    // 例如：上报异常到监控系统、显示用户友好的错误提示等
+    // Default global exception handling logic can be implemented here
+    // For example: report exceptions to monitoring system, show user-friendly error messages, etc.
   }
 }
 
-/// 异常拦截器
+/// Exception interceptor
 class ExceptionInterceptor extends Interceptor {
   final UnifiedExceptionHandler _handler = UnifiedExceptionHandler.instance;
   
@@ -539,14 +539,14 @@ class ExceptionInterceptor extends Interceptor {
     try {
       final unifiedException = await _handler.handleException(
         err,
-        context: '网络请求异常',
+        context: 'Network request exception',
         metadata: {
           'url': err.requestOptions.uri.toString(),
           'method': err.requestOptions.method,
         },
       );
       
-      // 将统一异常包装回 DioException
+      // Wrap unified exception back to DioException
       final wrappedError = DioException(
         requestOptions: err.requestOptions,
         response: err.response,
@@ -557,7 +557,7 @@ class ExceptionInterceptor extends Interceptor {
       
       handler.reject(wrappedError);
     } catch (e) {
-      // 如果异常处理器本身出错，则使用原始异常
+      // If exception handler itself fails, use original exception
       handler.reject(err);
     }
   }

@@ -50,8 +50,7 @@ class UpdateUserProfileRequest extends BaseNetworkRequest<UserModel> {
   @override
   HttpMethod get method => HttpMethod.put;
 
-  @override
-  Map<String, dynamic>? get data => userData;
+
 
   @override
   UserModel parseResponse(dynamic data) {

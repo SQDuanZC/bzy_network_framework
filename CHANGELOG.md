@@ -2,6 +2,25 @@
 
 本文档记录了 BZY 网络框架的所有重要变更。
 
+## [1.0.1] - 2025-7-30
+
+### ✨ 新增功能
+- **统一 queryParameters 方案**: 实现了统一使用 `queryParameters` 处理所有 HTTP 请求数据的方案
+  - GET/DELETE 请求：`queryParameters` 自动作为 URL 查询参数
+  - POST/PUT/PATCH 请求：`queryParameters` 自动转换为请求体数据
+  - 自动保存原始请求数据，便于调试和日志记录
+
+### 🔧 改进
+- **BaseNetworkRequest**: 优化了 `buildRequestOptions` 方法，支持自动数据转换
+- **UnifiedNetworkFramework**: 增强了原始数据保存逻辑，确保数据一致性
+- **示例代码**: 新增 `unified_query_parameters_example.dart` 演示统一方案的使用
+- **文档**: 新增 `unified_query_parameters.md` 详细说明统一方案的设计和使用
+
+### 📚 文档更新
+- 添加了统一 queryParameters 方案的完整文档
+- 提供了详细的使用示例和迁移指南
+- 更新了 API 文档和最佳实践
+
 ## [1.0.0] - 2025-1-15
 
 ### 🎉 首次发布

@@ -131,6 +131,11 @@ class UnifiedNetworkFramework {
   Future<NetworkResponse<T>> execute<T>(BaseNetworkRequest<T> request) async {
     _ensureInitialized();
     
+    // Store original request data before execution
+    // For unified queryParameters approach, store the actual data that will be sent
+    final originalData = _getEffectiveRequestData(request);
+    request.setOriginalRequestData(originalData);
+    
     // Apply plugin request preprocessing
     for (final plugin in _plugins.values) {
       await plugin.onRequestStart(request);
@@ -172,6 +177,29 @@ class UnifiedNetworkFramework {
     return await _executor.executeBatch(requests);
   }
   
+  /// Get effective request data based on HTTP method and queryParameters
+  dynamic _getEffectiveRequestData(BaseNetworkRequest request) {
+    final params = request.queryParameters;
+    
+    if (params != null && params.isNotEmpty) {
+      switch (request.method) {
+        case HttpMethod.post:
+        case HttpMethod.put:
+        case HttpMethod.patch:
+          // For POST/PUT/PATCH, queryParameters will be converted to request body
+          return params;
+        case HttpMethod.get:
+        case HttpMethod.delete:
+        default:
+          // For GET/DELETE, return null (no body data)
+          return null;
+      }
+    }
+    
+    // No queryParameters, return null
+    return null;
+  }
+
   /// Execute concurrent requests
   Future<List<NetworkResponse>> executeConcurrent(
     List<BaseNetworkRequest> requests, {

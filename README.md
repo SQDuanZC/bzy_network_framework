@@ -5,16 +5,16 @@
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v2.2.1-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.1-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY 网络框架** 是一个高性能、易扩展的 Flutter 网络请求解决方案，提供完整的网络请求、缓存、拦截器、监控等功能。
 
-## 🆕 最新更新 (v2.2.1)
+## 🆕 最新更新 (v1.0.1)
 
-- 🌐 **国际化改进**: 核心框架文件注释全面英文化
-- 📚 **文档完善**: 新增统一异常处理文档
-- 🧪 **测试增强**: 添加完整的异常处理测试套件
-- 🔧 **代码质量**: 提升代码文档一致性和可维护性
+- 🔄 **统一 queryParameters 方案**: 实现统一使用 `queryParameters` 处理所有 HTTP 请求数据
+- 🚀 **自动数据转换**: GET/DELETE 请求自动作为 URL 参数，POST/PUT/PATCH 请求自动转换为请求体
+- 📚 **文档完善**: 新增统一方案的详细文档和示例代码
+- 🛠️ **调试增强**: 自动保存原始请求数据，便于调试和日志记录
 
 ## ✨ 特性
 

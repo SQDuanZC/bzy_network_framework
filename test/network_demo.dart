@@ -258,13 +258,14 @@ class DemoGetRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   
   @override
   Map<String, dynamic> parseResponse(dynamic responseData) {
+    throw UnimplementedError('parseResponse not implemented for DemoGetRequest');
     // 模拟解析响应数据
-    return {
-      'path': path,
-      'timestamp': DateTime.now().toIso8601String(),
-      'data': 'Mock response for $path',
-      'random': Random().nextInt(1000),
-    };
+    // return {
+    //   'path': path,
+    //   'timestamp': DateTime.now().toIso8601String(),
+    //   'data': 'Mock response for $path',
+    //   'random': Random().nextInt(1000),
+    // };
   }
   
   @override

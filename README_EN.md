@@ -5,16 +5,16 @@ English | [中文](README.md)
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v2.2.1-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.1-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY Network Framework** is a high-performance, easily extensible Flutter network request solution that provides comprehensive network requests, caching, interceptors, monitoring, and other features.
 
-## 🆕 Latest Updates (v2.2.1)
+## 🆕 Latest Updates (v1.0.1)
 
-- 🌐 **Internationalization**: Core framework comments fully translated to English
-- 📚 **Documentation**: Added unified exception handling documentation
-- 🧪 **Testing**: Enhanced exception handling test suite
-- 🔧 **Code Quality**: Improved code documentation consistency and maintainability
+- 🔄 **Unified queryParameters Approach**: Implemented unified use of `queryParameters` for all HTTP request data
+- 🚀 **Automatic Data Conversion**: GET/DELETE requests automatically use URL parameters, POST/PUT/PATCH requests automatically convert to request body
+- 📚 **Enhanced Documentation**: Added comprehensive documentation and examples for the unified approach
+- 🛠️ **Debug Enhancement**: Automatic preservation of original request data for debugging and logging
 
 ## ✨ Features
 
