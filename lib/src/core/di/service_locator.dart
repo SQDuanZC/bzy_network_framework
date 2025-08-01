@@ -4,6 +4,7 @@ import '../interceptor/interceptor_manager.dart';
 import '../interceptor/logging_interceptor.dart' as logging;
 import '../queue/request_queue_manager.dart';
 import '../config/config_validator.dart';
+import '../cache/cache_manager.dart';
 import '../../utils/network_logger.dart';
 
 

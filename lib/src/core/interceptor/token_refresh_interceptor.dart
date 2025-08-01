@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-
+import 'dart:async';
+import 'package:synchronized/synchronized.dart';
 
 /// Token自动刷新拦截器
 /// 处理Token过期自动刷新、并发请求等待、刷新失败处理
@@ -24,6 +25,9 @@ class TokenRefreshInterceptor extends Interceptor {
   
   // 最后刷新时间
   DateTime? _lastRefreshTime;
+  
+  // 并发控制锁
+  final Lock _refreshLock = Lock();
   
   TokenRefreshInterceptor(TokenRefreshConfig config) : _dio = Dio() {
     _config = config;
@@ -130,72 +134,74 @@ class TokenRefreshInterceptor extends Interceptor {
   
   /// 刷新Token
   Future<bool> _refreshToken() async {
-    if (_isRefreshing) {
-      return await _waitForRefreshCompletion();
-    }
-    
-    _isRefreshing = true;
-    _refreshCompleter = Completer<bool>();
-    
-    try {
-      // 检查刷新频率限制
-      if (_isRefreshTooFrequent()) {
-        throw Exception('Token刷新过于频繁');
+    return await _refreshLock.synchronized(() async {
+      if (_isRefreshing) {
+        return await _waitForRefreshCompletion();
       }
       
-      // 检查刷新失败次数
-      if (_refreshFailureCount >= _config.maxRefreshRetries) {
-        throw Exception('Token刷新失败次数过多');
+      _isRefreshing = true;
+      _refreshCompleter = Completer<bool>();
+      
+      try {
+        // 检查刷新频率限制
+        if (_isRefreshTooFrequent()) {
+          throw Exception('Token刷新过于频繁');
+        }
+        
+        // 检查刷新失败次数
+        if (_refreshFailureCount >= _config.maxRefreshRetries) {
+          throw Exception('Token刷新失败次数过多');
+        }
+        
+        // 获取刷新Token
+        final refreshToken = await _getRefreshToken();
+        if (refreshToken == null || refreshToken.isEmpty) {
+          throw Exception('刷新Token不存在');
+        }
+        
+        // 执行刷新请求
+        final response = await _performRefreshRequest(refreshToken);
+        
+        // 解析新Token
+        final newTokens = _parseRefreshResponse(response);
+        if (newTokens == null) {
+          throw Exception('刷新响应解析失败');
+        }
+        
+        // 保存新Token
+        await _saveNewTokens(newTokens);
+        
+        // 更新最后刷新时间
+        _lastRefreshTime = DateTime.now();
+        
+        // 重置失败计数
+        _refreshFailureCount = 0;
+        
+        // 处理等待的请求
+        _processPendingRequests(true);
+        
+        _refreshCompleter!.complete(true);
+        return true;
+      } catch (e) {
+        // Token刷新失败: $e
+        _refreshFailureCount++;
+        
+        // 处理等待的请求
+        _processPendingRequests(false);
+        
+        _refreshCompleter!.complete(false);
+        
+        // 如果刷新失败次数过多，触发登出
+        if (_refreshFailureCount >= _config.maxRefreshRetries) {
+          _handleRefreshTokenFailure();
+        }
+        
+        return false;
+      } finally {
+        _isRefreshing = false;
+        _refreshCompleter = null;
       }
-      
-      // 获取刷新Token
-      final refreshToken = await _getRefreshToken();
-      if (refreshToken == null || refreshToken.isEmpty) {
-        throw Exception('刷新Token不存在');
-      }
-      
-      // 执行刷新请求
-      final response = await _performRefreshRequest(refreshToken);
-      
-      // 解析新Token
-      final newTokens = _parseRefreshResponse(response);
-      if (newTokens == null) {
-        throw Exception('刷新响应解析失败');
-      }
-      
-      // 保存新Token
-      await _saveNewTokens(newTokens);
-      
-      // 更新最后刷新时间
-      _lastRefreshTime = DateTime.now();
-      
-      // 重置失败计数
-      _refreshFailureCount = 0;
-      
-      // 处理等待的请求
-      _processPendingRequests(true);
-      
-      _refreshCompleter!.complete(true);
-      return true;
-    } catch (e) {
-      // Token刷新失败: $e
-      _refreshFailureCount++;
-      
-      // 处理等待的请求
-      _processPendingRequests(false);
-      
-      _refreshCompleter!.complete(false);
-      
-      // 如果刷新失败次数过多，触发登出
-      if (_refreshFailureCount >= _config.maxRefreshRetries) {
-        _handleRefreshTokenFailure();
-      }
-      
-      return false;
-    } finally {
-      _isRefreshing = false;
-      _refreshCompleter = null;
-    }
+    });
   }
   
   /// 等待刷新完成

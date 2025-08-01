@@ -1,6 +1,6 @@
 name: bzy_network_framework
 description: BZY 统一网络请求框架 - 高性能、易扩展的 Flutter 网络解决方案
-version: 1.0.1
+version: 1.0.2
 homepage: https://github.com/SQDuanZC/bzy_network_framework
 repository: https://github.com/SQDuanZC/bzy_network_framework
 issue_tracker: https://github.com/SQDuanZC/bzy_network_framework/issues

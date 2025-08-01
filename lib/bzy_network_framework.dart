@@ -8,6 +8,9 @@ export 'src/config/network_config.dart';
 export 'src/requests/base_network_request.dart';
 export 'src/requests/network_executor.dart';
 
+// 缓存管理
+export 'src/core/cache/cache_manager.dart';
+
 // BZY 统一网络框架（推荐使用）
 export 'src/frameworks/unified_framework.dart';
 

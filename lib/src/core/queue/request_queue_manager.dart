@@ -85,14 +85,38 @@ class RequestQueueManager {
       // 检查请求去重
       if (enableDeduplication && _config.enableDeduplication) {
         final duplicateKey = _generateDeduplicationKey(queuedRequest);
+        
+        // 更严格的重复请求检查
         if (_duplicateRequests.containsKey(duplicateKey)) {
-          // 添加到重复请求列表
-          _duplicateRequests[duplicateKey]!.add(queuedRequest);
-          _statistics.duplicateRequests++;
-          return completer.future;
-        } else {
-          _duplicateRequests[duplicateKey] = [queuedRequest];
+          final existingRequests = _duplicateRequests[duplicateKey]!;
+          
+          // 检查是否有正在执行的相同请求
+          final hasExecutingRequest = existingRequests.any((req) => 
+            _executingRequests.contains(req.id) && 
+            _requestCompleted[req.id] != true
+          );
+          
+          // 检查是否有等待中的相同请求
+          final hasPendingRequest = existingRequests.any((req) => 
+            _queues[req.priority]!.contains(req) && 
+            _requestCompleted[req.id] != true
+          );
+          
+          if (hasExecutingRequest || hasPendingRequest) {
+            // 如果有正在执行或等待的相同请求，将新请求添加到重复列表
+            existingRequests.add(queuedRequest);
+            _statistics.duplicateRequests++;
+            
+            // 请求去重: $effectiveRequestId (去重键: $duplicateKey)
+            return completer.future;
+          } else {
+            // 如果没有活跃的相同请求，清理旧的重复请求记录
+            _duplicateRequests.remove(duplicateKey);
+          }
         }
+        
+        // 创建新的重复请求列表
+        _duplicateRequests[duplicateKey] = [queuedRequest];
       }
       
       // 添加到对应优先级队列
@@ -220,11 +244,10 @@ class RequestQueueManager {
   
   /// 执行请求
   void _executeRequest(QueuedRequest request) {
-    _executingLock.synchronized(() {
-      _executingRequests.add(request.id);
-      _statistics.totalExecuted++;
-      _requestCompleted[request.id] = false;
-    });
+    // 使用原子操作避免优先级反转
+    _executingRequests.add(request.id);
+    _statistics.totalExecuted++;
+    _requestCompleted[request.id] = false;
     
     final startTime = DateTime.now();
     
@@ -248,13 +271,13 @@ class RequestQueueManager {
   
   /// 处理请求成功
   void _handleRequestSuccess(QueuedRequest request, Response response, DateTime startTime) {
-    _executingLock.synchronized(() {
-      // 检查是否已经处理过
-      if (_requestCompleted[request.id] == true) {
-        return;
-      }
-      _requestCompleted[request.id] = true;
-      
+    // 检查是否已经处理过
+    if (_requestCompleted[request.id] == true) {
+      return;
+    }
+    _requestCompleted[request.id] = true;
+    
+    try {
       _executingRequests.remove(request.id);
       _statistics.successfulRequests++;
       
@@ -272,28 +295,68 @@ class RequestQueueManager {
             }
           } catch (e) {
             // 记录错误但不影响其他请求
-            // 完成请求时发生错误: $e
+            print('完成重复请求时发生错误: $e');
+            // 如果完成失败，尝试用错误完成
+            try {
+              if (!duplicateRequest.completer.isCompleted) {
+                duplicateRequest.completer.completeError(
+                  Exception('处理重复请求响应时发生错误: $e')
+                );
+              }
+            } catch (e2) {
+              print('完成重复请求错误时再次发生错误: $e2');
+            }
           }
         }
         _duplicateRequests.remove(duplicateKey);
       }
       
+      // 完成原始请求
+      try {
+        if (!request.completer.isCompleted) {
+          request.completer.complete(response.data);
+        }
+      } catch (e) {
+        print('完成原始请求时发生错误: $e');
+        try {
+          if (!request.completer.isCompleted) {
+            request.completer.completeError(
+              Exception('处理请求响应时发生错误: $e')
+            );
+          }
+        } catch (e2) {
+          print('完成原始请求错误时再次发生错误: $e2');
+        }
+      }
+    } catch (e) {
+      print('处理请求成功时发生未预期错误: $e');
+      // 确保请求被标记为完成
+      try {
+        if (!request.completer.isCompleted) {
+          request.completer.completeError(
+            Exception('处理请求成功时发生内部错误: $e')
+          );
+        }
+      } catch (e2) {
+        print('处理内部错误时再次发生错误: $e2');
+      }
+    } finally {
       // 清理状态
       _requestCompleted.remove(request.id);
-    });
+    }
     
-    // 请求执行成功: ${request.id} (耗时: ${duration.inMilliseconds}ms)
+    // 请求执行成功: ${request.id} (耗时: ${DateTime.now().difference(startTime).inMilliseconds}ms)
   }
   
   /// 处理请求错误
   void _handleRequestError(QueuedRequest request, dynamic error, DateTime startTime) {
-    _executingLock.synchronized(() {
-      // 检查是否已经处理过
-      if (_requestCompleted[request.id] == true) {
-        return;
-      }
-      _requestCompleted[request.id] = true;
-      
+    // 检查是否已经处理过
+    if (_requestCompleted[request.id] == true) {
+      return;
+    }
+    _requestCompleted[request.id] = true;
+    
+    try {
       _executingRequests.remove(request.id);
       _statistics.failedRequests++;
       
@@ -319,65 +382,103 @@ class RequestQueueManager {
             }
           } catch (e) {
             // 记录错误但不影响其他请求
-            // 完成请求错误时发生错误: $e
+            print('完成重复请求错误时发生错误: $e');
+            // 尝试用包装错误完成
+            try {
+              if (!duplicateRequest.completer.isCompleted) {
+                duplicateRequest.completer.completeError(
+                  Exception('处理重复请求错误时发生内部错误: $e, 原始错误: $error')
+                );
+              }
+            } catch (e2) {
+              print('完成重复请求包装错误时再次发生错误: $e2');
+            }
           }
         }
         _duplicateRequests.remove(duplicateKey);
       }
       
+      // 完成原始请求
+      try {
+        if (!request.completer.isCompleted) {
+          request.completer.completeError(error);
+        }
+      } catch (e) {
+        print('完成原始请求错误时发生错误: $e');
+        try {
+          if (!request.completer.isCompleted) {
+            request.completer.completeError(
+              Exception('处理请求错误时发生内部错误: $e, 原始错误: $error')
+            );
+          }
+        } catch (e2) {
+          print('完成原始请求包装错误时再次发生错误: $e2');
+        }
+      }
+    } catch (e) {
+      print('处理请求错误时发生未预期错误: $e, 原始错误: $error');
+      // 确保请求被标记为完成
+      try {
+        if (!request.completer.isCompleted) {
+          request.completer.completeError(
+            Exception('处理请求错误时发生内部错误: $e, 原始错误: $error')
+          );
+        }
+      } catch (e2) {
+        print('处理内部错误时再次发生错误: $e2');
+      }
+    } finally {
       // 清理状态
       _requestCompleted.remove(request.id);
-    });
+    }
     
-    // 请求执行失败: ${request.id} (耗时: ${duration.inMilliseconds}ms, 错误: $error)
+    // 请求执行失败: ${request.id} (耗时: ${DateTime.now().difference(startTime).inMilliseconds}ms, 错误: $error)
   }
   
   /// 处理请求超时
   void _handleRequestTimeout(QueuedRequest request) {
-    _executingLock.synchronized(() {
-      // 检查是否已经处理过
-      if (_requestCompleted[request.id] == true) {
-        return;
-      }
-      _requestCompleted[request.id] = true;
-      
-      _executingRequests.remove(request.id);
-      _statistics.timeoutRequests++;
-      
-      final error = DioException(
-        requestOptions: RequestOptions(path: ''),
-        message: '请求超时',
-        type: DioExceptionType.receiveTimeout,
-      );
-      
-      // 检查是否需要重试
-      if (_shouldRetryRequest(request, error)) {
-        // 重置状态以允许重试
-        _requestCompleted[request.id] = false;
-        _retryRequest(request);
-        return;
-      }
-      
-      // 处理重复请求
-      final duplicateKey = _generateDeduplicationKey(request);
-      final duplicateRequests = _duplicateRequests[duplicateKey];
-      if (duplicateRequests != null) {
-        for (final duplicateRequest in duplicateRequests) {
-          try {
-            if (!duplicateRequest.completer.isCompleted) {
-              duplicateRequest.completer.completeError(error);
-            }
-          } catch (e) {
-            // 记录错误但不影响其他请求
-            // 完成请求超时时发生错误: $e
+    // 检查是否已经处理过
+    if (_requestCompleted[request.id] == true) {
+      return;
+    }
+    _requestCompleted[request.id] = true;
+    
+    _executingRequests.remove(request.id);
+    _statistics.timeoutRequests++;
+    
+    final error = DioException(
+      requestOptions: RequestOptions(path: ''),
+      message: '请求超时',
+      type: DioExceptionType.receiveTimeout,
+    );
+    
+    // 检查是否需要重试
+    if (_shouldRetryRequest(request, error)) {
+      // 重置状态以允许重试
+      _requestCompleted[request.id] = false;
+      _retryRequest(request);
+      return;
+    }
+    
+    // 处理重复请求
+    final duplicateKey = _generateDeduplicationKey(request);
+    final duplicateRequests = _duplicateRequests[duplicateKey];
+    if (duplicateRequests != null) {
+      for (final duplicateRequest in duplicateRequests) {
+        try {
+          if (!duplicateRequest.completer.isCompleted) {
+            duplicateRequest.completer.completeError(error);
           }
+        } catch (e) {
+          // 记录错误但不影响其他请求
+          // 完成请求超时时发生错误: $e
         }
-        _duplicateRequests.remove(duplicateKey);
       }
-      
-      // 清理状态
-      _requestCompleted.remove(request.id);
-    });
+      _duplicateRequests.remove(duplicateKey);
+    }
+    
+    // 清理状态
+    _requestCompleted.remove(request.id);
     
     // 请求超时: ${request.id}
   }
@@ -439,6 +540,23 @@ class RequestQueueManager {
       return false;
     }
     
+    // 检查请求方法的幂等性
+    final method = request.metadata['method']?.toString().toUpperCase() ?? 'UNKNOWN';
+    if (!_isIdempotentMethod(method)) {
+      // 非幂等请求不允许重试，除非是网络连接错误
+      if (error is DioException) {
+        switch (error.type) {
+          case DioExceptionType.connectionTimeout:
+          case DioExceptionType.connectionError:
+            // 连接级别的错误可以重试，因为请求可能没有到达服务器
+            return true;
+          default:
+            return false;
+        }
+      }
+      return false;
+    }
+    
     // 检查错误类型
     if (error is DioException) {
       switch (error.type) {
@@ -448,7 +566,7 @@ class RequestQueueManager {
         case DioExceptionType.connectionError:
           return true;
         case DioExceptionType.badResponse:
-          // 5xx错误可以重试
+          // 5xx错误可以重试（仅限幂等请求）
           final statusCode = error.response?.statusCode;
           return statusCode != null && statusCode >= 500;
         default:
@@ -457,6 +575,12 @@ class RequestQueueManager {
     }
     
     return false;
+  }
+  
+  /// 检查HTTP方法是否为幂等
+  bool _isIdempotentMethod(String method) {
+    const idempotentMethods = {'GET', 'PUT', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE'};
+    return idempotentMethods.contains(method.toUpperCase());
   }
   
   /// 计算重试延迟
@@ -487,24 +611,41 @@ class RequestQueueManager {
     // 使用更可靠的去重策略
     final buffer = StringBuffer();
     
-    // 添加函数哈希
-    buffer.write(request.requestFunction.hashCode);
+    // 添加请求方法和URL（从元数据中提取）
+    final method = request.metadata['method'] ?? 'UNKNOWN';
+    final url = request.metadata['url'] ?? request.metadata['path'] ?? '';
+    buffer.write('$method:$url');
     buffer.write('-');
     
-    // 添加元数据的JSON字符串哈希（确保顺序一致）
-    final sortedMetadata = Map.fromEntries(
-      request.metadata.entries.toList()..sort((a, b) => a.key.compareTo(b.key))
-    );
-    final metadataJson = jsonEncode(sortedMetadata);
-    buffer.write(metadataJson.hashCode);
+    // 添加请求体哈希（如果存在）
+    final requestBody = request.metadata['data'];
+    if (requestBody != null) {
+      try {
+        final bodyJson = jsonEncode(requestBody);
+        buffer.write(bodyJson.hashCode);
+      } catch (e) {
+        buffer.write(requestBody.hashCode);
+      }
+    } else {
+      buffer.write('no-body');
+    }
     buffer.write('-');
     
-    // 添加优先级
-    buffer.write(request.priority.index);
-    buffer.write('-');
-    
-    // 添加超时时间
-    buffer.write(request.timeout.inMilliseconds);
+    // 添加查询参数哈希（确保顺序一致）
+    final queryParams = request.metadata['queryParameters'];
+    if (queryParams != null && queryParams is Map) {
+      final sortedParams = Map.fromEntries(
+        queryParams.entries.toList()..sort((a, b) => a.key.toString().compareTo(b.key.toString()))
+      );
+      try {
+        final paramsJson = jsonEncode(sortedParams);
+        buffer.write(paramsJson.hashCode);
+      } catch (e) {
+        buffer.write(sortedParams.hashCode);
+      }
+    } else {
+      buffer.write('no-params');
+    }
     
     return buffer.toString();
   }
