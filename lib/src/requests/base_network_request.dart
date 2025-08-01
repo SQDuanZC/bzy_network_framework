@@ -25,6 +25,12 @@ abstract class BaseNetworkRequest<T> {
   /// Request path
   String get path;
   
+  /// 获取baseUrl
+  /// 从NetworkConfig获取当前配置的baseUrl
+  String get baseUrl => NetworkConfig.instance.baseUrl;
+  
+
+  
   /// HTTP method
   HttpMethod get method => HttpMethod.get;
   

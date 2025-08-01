@@ -14,6 +14,7 @@ class NetworkConfig {
   int sendTimeout = 15000; // 发送超时时间（毫秒）
   int maxRetryCount = 3; // 最大重试次数
   int retryDelay = 1000; // 重试延迟时间（毫秒）
+  bool enableExponentialBackoff = true; // 是否启用指数退避重试
   bool enableLogging = true; // 是否启用日志
   
   // 环境配置
@@ -38,6 +39,7 @@ class NetworkConfig {
     int? sendTimeout,
     int? maxRetryCount,
     int? retryDelay,
+    bool? enableExponentialBackoff,
     bool? enableLogging,
     Environment? environment,
     bool? enableCache,
@@ -49,6 +51,7 @@ class NetworkConfig {
     if (sendTimeout != null) this.sendTimeout = sendTimeout;
     if (maxRetryCount != null) this.maxRetryCount = maxRetryCount;
     if (retryDelay != null) this.retryDelay = retryDelay;
+    if (enableExponentialBackoff != null) this.enableExponentialBackoff = enableExponentialBackoff;
     if (enableLogging != null) this.enableLogging = enableLogging;
     if (environment != null) {
       _environment = environment;
@@ -78,6 +81,20 @@ class NetworkConfig {
         enableLogging = false;
         break;
     }
+  }
+  
+  /// 计算指数退避重试延迟
+  int calculateRetryDelay(int retryAttempt) {
+    if (!enableExponentialBackoff) {
+      return retryDelay;
+    }
+    
+    // 指数退避算法：baseDelay * (2 ^ retryAttempt)
+    // 添加最大延迟限制，避免延迟过长
+    final exponentialDelay = retryDelay * (1 << retryAttempt);
+    const maxDelay = 30000; // 最大延迟30秒
+    
+    return exponentialDelay > maxDelay ? maxDelay : exponentialDelay;
   }
 }
 

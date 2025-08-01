@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'environment.dart' as env;
 import 'network_config.dart';
+import 'environment_config.dart';
 
 /// 配置管理器
 /// 支持多环境配置、动态配置切换、配置验证
@@ -12,7 +13,7 @@ class ConfigManager {
   env.Environment _currentEnvironment = env.Environment.development;
   
   // 环境配置映射
-  final Map<env.Environment, Map<String, dynamic>> _environmentConfigs = {};
+  final Map<env.Environment, EnvironmentConfig> _environmentConfigs = {};
   
   // 运行时配置
   final Map<String, dynamic> _runtimeConfigs = {};
@@ -42,71 +43,41 @@ class ConfigManager {
   env.Environment get currentEnvironment => _currentEnvironment;
   
   /// 当前配置
-  Map<String, dynamic> get currentConfig => 
-      _environmentConfigs[_currentEnvironment] ?? {};
+  EnvironmentConfig? get currentConfig => 
+      _environmentConfigs[_currentEnvironment];
+  
+  /// 当前配置的Map形式（向后兼容）
+  Map<String, dynamic> get currentConfigMap => 
+      _environmentConfigs[_currentEnvironment]?.toMap() ?? {};
   
   /// 配置变更事件流
   Stream<ConfigChangeEvent> get configChangeStream => _eventController.stream;
   
+  /// 配置变更事件流
+  Stream<ConfigChangeEvent> get configChanges => _eventController.stream;
+  
   /// 初始化默认配置
   void _initializeDefaultConfigs() {
-    // 开发环境配置
-    _environmentConfigs[env.Environment.development] = {
-      'baseUrl': 'https://dev-api.example.com',
-      'connectTimeout': 15000,
-      'receiveTimeout': 15000,
-      'sendTimeout': 15000,
-      'maxRetryCount': 3,
-      'enableLogging': true,
-      'enableCache': true,
-      'cacheMaxAge': 300,
-    };
-    
-    // 测试环境配置
-    _environmentConfigs[env.Environment.testing] = {
-      'baseUrl': 'https://test-api.example.com',
-      'connectTimeout': 10000,
-      'receiveTimeout': 10000,
-      'sendTimeout': 10000,
-      'maxRetryCount': 2,
-      'enableLogging': true,
-      'enableCache': true,
-      'cacheMaxAge': 180,
-    };
-    
-    // 预发布环境配置
-    _environmentConfigs[env.Environment.staging] = {
-      'baseUrl': 'https://staging-api.example.com',
-      'connectTimeout': 20000,
-      'receiveTimeout': 20000,
-      'sendTimeout': 20000,
-      'maxRetryCount': 5,
-      'enableLogging': true,
-      'enableCache': true,
-      'cacheMaxAge': 600,
-    };
-    
-    // 生产环境配置
-    _environmentConfigs[env.Environment.production] = {
-      'baseUrl': 'https://api.example.com',
-      'connectTimeout': 30000,
-      'receiveTimeout': 30000,
-      'sendTimeout': 30000,
-      'maxRetryCount': 3,
-      'enableLogging': false,
-      'enableCache': true,
-      'cacheMaxAge': 900,
-    };
+    // 使用预设配置初始化各环境
+    _environmentConfigs[env.Environment.development] = EnvironmentConfigPresets.development;
+    _environmentConfigs[env.Environment.testing] = EnvironmentConfigPresets.testing;
+    _environmentConfigs[env.Environment.staging] = EnvironmentConfigPresets.staging;
+    _environmentConfigs[env.Environment.production] = EnvironmentConfigPresets.production;
   }
   
-  /// 设置环境配置
+  /// 设置环境配置（Map方式，向后兼容）
   void setEnvironmentConfig(env.Environment environment, Map<String, dynamic> config) {
+    setEnvironmentConfigObject(environment, EnvironmentConfig.fromMap(config));
+  }
+  
+  /// 设置环境配置（对象方式）
+  void setEnvironmentConfigObject(env.Environment environment, EnvironmentConfig config) {
     final oldConfig = _environmentConfigs[environment];
-    _environmentConfigs[environment] = Map.from(config);
+    _environmentConfigs[environment] = config;
     
     // 如果是当前环境，立即应用配置
     if (environment == _currentEnvironment) {
-      _applyConfig(config);
+      _applyConfigObject(config);
     }
     
     // 发送配置变更事件
@@ -114,10 +85,48 @@ class ConfigManager {
       ConfigChangeEvent(
         type: ConfigChangeType.environmentConfigUpdated,
         environment: environment,
-        oldConfig: oldConfig,
-        newConfig: config,
+        oldConfig: oldConfig?.toMap(),
+        newConfig: config.toMap(),
       ),
     );
+  }
+  
+  /// 更新环境配置的单个属性
+  void updateEnvironmentProperty(env.Environment environment, String propertyName, dynamic value) {
+    final config = _environmentConfigs[environment];
+    if (config == null) {
+      throw StateError('Environment $environment not configured');
+    }
+    
+    final oldConfig = EnvironmentConfig.fromMap(config.toMap()); // 创建副本
+    config.updateProperty(propertyName, value);
+    
+    // 如果是当前环境，立即应用配置
+    if (environment == _currentEnvironment) {
+      _applyConfigObject(config);
+    }
+    
+    // 发送配置变更事件
+    _notifyConfigChange(
+      ConfigChangeEvent(
+        type: ConfigChangeType.propertyUpdated,
+        environment: environment,
+        propertyName: propertyName,
+        oldValue: oldConfig.getProperty(propertyName),
+        newValue: value,
+        oldConfig: oldConfig.toMap(),
+        newConfig: config.toMap(),
+      ),
+    );
+  }
+  
+  /// 获取环境配置的属性值
+  T? getEnvironmentProperty<T>(env.Environment environment, String propertyName) {
+    final config = _environmentConfigs[environment];
+    if (config == null) return null;
+    
+    final value = config.getProperty(propertyName);
+    return value is T ? value : null;
   }
   
   /// 切换环境
@@ -133,7 +142,9 @@ class ConfigManager {
     final newConfig = currentConfig;
     
     // 应用新配置
-    await _applyConfig(newConfig);
+    if (newConfig != null) {
+      await _applyConfigObject(newConfig);
+    }
     
     // 发送环境切换事件
     _notifyConfigChange(
@@ -141,26 +152,29 @@ class ConfigManager {
         type: ConfigChangeType.environmentSwitched,
         environment: environment,
         oldEnvironment: oldEnvironment,
-        oldConfig: oldConfig,
-        newConfig: newConfig,
+        oldConfig: oldConfig?.toMap(),
+        newConfig: newConfig?.toMap(),
       ),
     );
     
     // 环境已切换: $oldEnvironment -> $environment
   }
   
-  /// 应用配置
-  Future<void> _applyConfig(Map<String, dynamic> config) async {
+
+  
+  /// 应用配置（对象方式）
+  Future<void> _applyConfigObject(EnvironmentConfig config) async {
     // 更新全局网络配置
     NetworkConfig.instance.configure(
-      baseUrl: config['baseUrl'] as String?,
-      connectTimeout: config['connectTimeout'] as int?,
-      receiveTimeout: config['receiveTimeout'] as int?,
-      sendTimeout: config['sendTimeout'] as int?,
-      maxRetryCount: config['maxRetryCount'] as int?,
-      enableLogging: config['enableLogging'] as bool?,
-      enableCache: config['enableCache'] as bool?,
-      cacheMaxAge: config['cacheMaxAge'] as int?,
+      baseUrl: config.baseUrl,
+      connectTimeout: config.connectTimeout,
+      receiveTimeout: config.receiveTimeout,
+      sendTimeout: config.sendTimeout,
+      maxRetryCount: config.maxRetryCount,
+      enableLogging: config.enableLogging,
+      enableCache: config.enableCache,
+      cacheMaxAge: config.cacheMaxAge,
+      enableExponentialBackoff: config.enableExponentialBackoff,
       environment: _convertEnvironment(_currentEnvironment),
     );
   }
@@ -382,10 +396,10 @@ class ConfigManager {
     _runtimeConfigs.clear();
     _initializeDefaultConfigs();
     _currentEnvironment = env.Environment.development;
-    _applyConfig(currentConfig);
+    _applyConfigObject(currentConfig!);
     
     _notifyConfigChange(
-      ConfigChangeEvent(
+      const ConfigChangeEvent(
         type: ConfigChangeType.configReset,
       ),
     );
@@ -396,25 +410,18 @@ class ConfigManager {
   /// 验证当前配置
   bool validateCurrentConfig() {
     final config = currentConfig;
-    
-    // 验证必需字段
-    final requiredFields = ['baseUrl', 'connectTimeout', 'receiveTimeout'];
-    for (final field in requiredFields) {
-      if (!config.containsKey(field) || config[field] == null) {
-        return false;
-      }
-    }
+    if (config == null) return false;
     
     // 验证字段类型和值
-    if (config['baseUrl'] is! String || (config['baseUrl'] as String).isEmpty) {
+    if (config.baseUrl.isEmpty) {
       return false;
     }
     
-    if (config['connectTimeout'] is! int || (config['connectTimeout'] as int) <= 0) {
+    if (config.connectTimeout <= 0) {
       return false;
     }
     
-    if (config['receiveTimeout'] is! int || (config['receiveTimeout'] as int) <= 0) {
+    if (config.receiveTimeout <= 0) {
       return false;
     }
     
@@ -540,6 +547,7 @@ class ConfigChangeEvent {
   final env.Environment? oldEnvironment;
   final Map<String, dynamic>? oldConfig;
   final Map<String, dynamic>? newConfig;
+  final String? propertyName;
   
   const ConfigChangeEvent({
     required this.type,
@@ -550,6 +558,7 @@ class ConfigChangeEvent {
     this.oldEnvironment,
     this.oldConfig,
     this.newConfig,
+    this.propertyName,
   });
 }
 
@@ -557,6 +566,7 @@ class ConfigChangeEvent {
 enum ConfigChangeType {
   environmentSwitched,
   environmentConfigUpdated,
+  propertyUpdated,
   runtimeConfigUpdated,
   runtimeConfigRemoved,
   configReset,

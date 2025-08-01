@@ -9,8 +9,15 @@
 
 **BZY 网络框架** 是一个高性能、易扩展的 Flutter 网络请求解决方案，提供完整的网络请求、缓存、拦截器、监控等功能。
 
-## 🆕 最新更新 (v1.0.1)
+## 🆕 最新更新 (v1.0.2)
 
+- ⚡ **配置优化**: 优化超时配置（连接15s，接收/发送30s），调整缓存策略（开发5分钟，生产15分钟）
+- 🔄 **智能重试**: 新增指数退避重试机制，最大重试3次，提升网络请求成功率
+- 📋 **配置预设**: 新增多种配置预设模板（开发、生产、快速响应、重负载、离线优先、低带宽）
+- 🛡️ **配置验证**: 增强配置验证器，支持指数退避配置验证
+- 📚 **示例完善**: 新增配置预设使用示例，简化常见场景配置
+
+### v1.0.1 更新
 - 🔄 **统一 queryParameters 方案**: 实现统一使用 `queryParameters` 处理所有 HTTP 请求数据
 - 🚀 **自动数据转换**: GET/DELETE 请求自动作为 URL 参数，POST/PUT/PATCH 请求自动转换为请求体
 - 📚 **文档完善**: 新增统一方案的详细文档和示例代码
@@ -49,19 +56,59 @@ flutter pub get
 
 ### 基础配置
 
+#### 方式一：使用配置预设（推荐）
+
 ```dart
 import 'package:bzy_network_framework/bzy_network_framework.dart';
 
 void main() async {
-  // 初始化 BZY 网络框架
-  await UnifiedNetworkFramework.initialize(
+  // 使用开发环境预设
+  NetworkConfig.instance.initializeFromPreset('development');
+  
+  // 或使用生产环境预设
+  // NetworkConfig.instance.initializeFromPreset('production');
+  
+  // 设置基础URL
+  NetworkConfig.instance.updateBaseUrl('https://api.example.com');
+  
+  // 初始化框架
+  await UnifiedNetworkFramework.initialize();
+  
+  runApp(MyApp());
+}
+```
+
+#### 可用的配置预设
+
+- `development`: 开发环境（连接15s，缓存5分钟，启用日志）
+- `production`: 生产环境（连接15s，缓存15分钟，禁用日志）
+- `testing`: 测试环境（连接10s，禁用缓存）
+- `fastResponse`: 快速响应（连接5s，接收10s）
+- `heavyLoad`: 重负载（连接30s，接收60s，重试5次）
+- `offlineFirst`: 离线优先（长缓存，多重试）
+- `lowBandwidth`: 低带宽（短超时，启用缓存）
+
+#### 方式二：手动配置
+
+```dart
+import 'package:bzy_network_framework/bzy_network_framework.dart';
+
+void main() async {
+  // 手动初始化配置
+  NetworkConfig.instance.initialize(
     baseUrl: 'https://api.example.com',
-    connectTimeout: Duration(seconds: 10),
-    receiveTimeout: Duration(seconds: 30),
+    connectTimeout: 15000,  // 15秒
+    receiveTimeout: 30000,  // 30秒
+    sendTimeout: 30000,     // 30秒
     enableLogging: true,
     enableCache: true,
+    defaultCacheDuration: 300,  // 5分钟
     maxRetries: 3,
+    enableExponentialBackoff: true,  // 启用指数退避
   );
+  
+  // 初始化框架
+  await UnifiedNetworkFramework.initialize();
   
   runApp(MyApp());
 }

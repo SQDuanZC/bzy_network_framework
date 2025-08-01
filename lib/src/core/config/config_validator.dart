@@ -165,6 +165,19 @@ class NetworkConfigValidator extends ConfigValidator<NetworkConfig> {
       warnings.add('Retry delay is very long (${config.retryDelay}ms)');
     }
     
+    // 验证指数退避设置
+    if (config.enableExponentialBackoff && config.maxRetryCount > 0) {
+      if (config.retryDelay < 500) {
+        warnings.add('Initial retry delay is short for exponential backoff (${config.retryDelay}ms), consider increasing it');
+      }
+      
+      // 计算最大延迟时间（假设指数因子为2）
+      final maxDelay = config.calculateRetryDelay(config.maxRetryCount - 1);
+      if (maxDelay > 30000) {
+        warnings.add('Maximum retry delay with exponential backoff is very long (${maxDelay}ms)');
+      }
+    }
+    
     return errors.isEmpty 
         ? ValidationResult.success(warnings: warnings)
         : ValidationResult.failure(errors, warnings: warnings);
