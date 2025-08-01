@@ -1,260 +1,323 @@
-# 测试文件夹说明
+# BZY Network Framework Demo 示例
 
-本文件夹包含了 BZY Network Framework 统一异常处理机制的完整测试示例和工具。
+This directory contains complete example code for BZY Network Framework, covering all core features from basic functionality to advanced applications. / 本目录包含了 BZY Network Framework 的完整示例代码 (complete example code)，从基础功能到高级应用 (from basic functionality to advanced applications)，涵盖了框架的所有核心特性 (covering all core features)。
 
-## 文件结构
+## 📁 Demo File List / Demo 文件列表 (Demo File List)
 
-```
-test/
-├── README.md                      # 本说明文件
-├── test_config.dart               # 测试配置和工具类
-├── test_suite.dart                # 完整测试套件
-├── unified_exception_test.dart    # 统一异常处理完整测试
-├── simple_exception_test.dart     # 简单异常处理测试示例
-├── usage_examples.dart            # 网络框架使用示例
-├── network_demo.dart              # 网络请求综合Demo
-├── demo_app.dart                  # Flutter Demo应用
-└── network_test_base.dart         # 网络测试基础设施
-```
+### 1. Basic Examples / 基础示例 (Basic Examples) (01-03)
 
-## 测试文件说明
+#### `01_basic_demo.dart` - Basic Network Requests / 基础网络请求 (Basic Network Requests)
+- **Function / 功能 (Function)**: Demonstrates basic GET, POST, PUT, DELETE requests / 演示最基本的 GET、POST、PUT、DELETE 请求 (demonstrates basic HTTP methods)
+- **Features / 特点 (Features)**: Simple and easy to understand, suitable for beginners / 简单易懂 (simple and easy to understand)，适合初学者 (suitable for beginners)
+- **Includes / 包含 (Includes)**:
+- Basic HTTP method usage / 基础 HTTP 方法使用 (basic HTTP method usage)
+- Simple response handling / 简单的响应处理 (simple response handling)
+- Basic error handling / 基本错误处理 (basic error handling)
 
-### 1. test_config.dart
-测试配置和工具类，包含：
-- `TestConfig`: 测试环境配置
-- `TestApiRequest`: 测试用的网络请求类
-- `TestExceptionGenerator`: 异常生成器
-- `TestAssertions`: 测试断言工具
-- `TestDataGenerator`: 测试数据生成器
-- `TestPerformanceMonitor`: 性能监控工具
+#### `02_advanced_demo.dart` - Advanced Network Features / 高级网络功能 (Advanced Network Features)
+- **Function / 功能 (Function)**: Demonstrates advanced network features / 展示高级网络特性 (demonstrates advanced network features)
+- **Features / 特点 (Features)**: Covers caching, retry, interceptors, etc. / 涵盖缓存、重试、拦截器等 (covers caching, retry, interceptors, etc.)
+- **Includes / 包含 (Includes)**:
+- Request caching mechanism / 请求缓存机制 (request caching mechanism)
+- Automatic retry strategy / 自动重试策略 (automatic retry strategy)
+- Custom interceptors / 自定义拦截器 (custom interceptors)
+- Request priority settings / 请求优先级设置 (request priority settings)
+- Timeout configuration / 超时配置 (timeout configuration)
 
-### 2. unified_exception_test.dart
-完整的统一异常处理测试，包含：
-- DioException 转换测试
-- HTTP 状态码处理测试
-- SocketException 处理测试
-- FormatException 处理测试
-- 自定义异常处理测试
-- 异常统计功能测试
-- 全局异常处理器测试
-- 异常上下文和元数据测试
-- 异常重试判断测试
-- 异常类型判断测试
-- 异常拦截器测试
-- 网络框架集成测试
-- 性能测试
-- 边界测试
+#### `03_file_operations_demo.dart` - File Operations / 文件操作 (File Operations)
+- **Function / 功能 (Function)**: File upload and download functionality / 文件上传和下载功能 (file upload and download functionality)
+- **Features / 特点 (Features)**: Supports progress monitoring and batch operations / 支持进度监控和批量操作 (supports progress monitoring and batch operations)
+- **Includes / 包含 (Includes)**:
+- Single file upload / 单文件上传 (single file upload)
+- Multiple file batch upload / 多文件批量上传 (multiple file batch upload)
+- File download / 文件下载 (file download)
+- Upload/download progress monitoring / 上传/下载进度监控 (upload/download progress monitoring)
+- File type validation / 文件类型验证 (file type validation)
 
-### 3. simple_exception_test.dart
-简单的异常处理测试示例，适合快速了解和学习：
-- 基本异常转换
-- HTTP错误处理
-- 自定义异常
-- 异常统计
-- 异常属性判断
-- 异常上下文和元数据
-- 全局异常处理器
+### 2. Intermediate Examples / 中级示例 (Intermediate Examples) (04-06)
 
-### 4. test_suite.dart
-完整的测试套件，运行所有测试：
-- 统一异常处理测试
-- 性能测试
-- 边界测试
+#### `04_interceptors_demo.dart` - Interceptor System / 拦截器系统 (Interceptor System)
+- **Function / 功能 (Function)**: In-depth demonstration of interceptor usage / 深入展示拦截器的使用 (in-depth demonstration of interceptor usage)
+- **Features / 特点 (Features)**: Multiple interceptor types and application scenarios / 多种拦截器类型和应用场景 (multiple interceptor types and application scenarios)
+- **Includes / 包含 (Includes)**:
+  - Authentication interceptor / 认证拦截器 (authentication interceptor)
+  - Logging interceptor / 日志拦截器 (logging interceptor)
+  - Cache interceptor / 缓存拦截器 (cache interceptor)
+  - Error handling interceptor / 错误处理拦截器 (error handling interceptor)
+  - Interceptor chain management / 拦截器链管理 (interceptor chain management)
 
-## 运行测试
+#### `05_exception_handling_demo.dart` - Exception Handling / 异常处理 (Exception Handling)
+- **Function / 功能 (Function)**: Comprehensive exception handling mechanism / 全面的异常处理机制 (comprehensive exception handling mechanism)
+- **Features / 特点 (Features)**: Multi-level exception handling and recovery strategies / 多层次异常处理和恢复策略 (multi-level exception handling and recovery strategies)
+- **Includes / 包含 (Includes)**:
+  - Network exception handling / 网络异常处理 (network exception handling)
+  - Business exception handling / 业务异常处理 (business exception handling)
+  - Global exception handler / 全局异常处理器 (global exception handler)
+  - Exception recovery strategies / 异常恢复策略 (exception recovery strategies)
+  - Degradation handling / 降级处理 (degradation handling)
 
-### 运行所有测试
+#### `06_cache_demo.dart` - Cache System / 缓存系统 (Cache System)
+- **Function / 功能 (Function)**: Intelligent cache management / 智能缓存管理 (intelligent cache management)
+- **Features / 特点 (Features)**: Multiple cache strategies and lifecycle management / 多种缓存策略和生命周期管理 (multiple cache strategies and lifecycle management)
+- **Includes / 包含 (Includes)**:
+  - Memory cache / 内存缓存 (memory cache)
+  - Disk cache / 磁盘缓存 (disk cache)
+  - Cache strategy configuration / 缓存策略配置 (cache strategy configuration)
+  - Cache invalidation mechanism / 缓存失效机制 (cache invalidation mechanism)
+  - Cache statistics / 缓存统计信息 (cache statistics)
+
+### 3. Advanced Examples / 高级示例 (Advanced Examples) (07-09)
+
+#### `07_concurrent_demo.dart` - Concurrent Processing / 并发处理 (Concurrent Processing)
+- **Function / 功能 (Function)**: High-concurrency request management / 高并发请求管理 (high-concurrency request management)
+- **Features / 特点 (Features)**: Concurrency control and performance optimization / 并发控制和性能优化 (concurrency control and performance optimization)
+- **Includes / 包含 (Includes)**:
+  - Concurrent request limiting / 并发请求限制 (concurrent request limiting)
+  - Request queue management / 请求队列管理 (request queue management)
+  - Batch request processing / 批量请求处理 (batch request processing)
+  - Concurrent performance monitoring / 并发性能监控 (concurrent performance monitoring)
+  - Resource pool management / 资源池管理 (resource pool management)
+
+#### `08_websocket_demo.dart` - WebSocket Communication / WebSocket 通信 (WebSocket Communication)
+- **Function / 功能 (Function)**: Real-time bidirectional communication / 实时双向通信 (real-time bidirectional communication)
+- **Features / 特点 (Features)**: Complete WebSocket lifecycle management / 完整的 WebSocket 生命周期管理 (complete WebSocket lifecycle management)
+- **Includes / 包含 (Includes)**:
+  - WebSocket connection management / WebSocket 连接管理 (WebSocket connection management)
+  - Message sending and receiving / 消息发送和接收 (message sending and receiving)
+  - Connection status monitoring / 连接状态监控 (connection status monitoring)
+  - Automatic reconnection mechanism / 自动重连机制 (automatic reconnection mechanism)
+  - Heartbeat detection / 心跳检测 (heartbeat detection)
+
+#### `09_graphql_demo.dart` - GraphQL Support / GraphQL 支持 (GraphQL Support)
+- **Function / 功能 (Function)**: GraphQL queries and mutations / GraphQL 查询和变更 (GraphQL queries and mutations)
+- **Features / 特点 (Features)**: Modern API query approach / 现代化的 API 查询方式 (modern API query approach)
+- **Includes / 包含 (Includes)**:
+  - GraphQL queries / GraphQL 查询 (GraphQL queries)
+  - GraphQL mutations / GraphQL 变更 (GraphQL mutations)
+  - Subscription functionality / 订阅功能 (subscription functionality)
+  - Query optimization / 查询优化 (query optimization)
+  - Error handling / 错误处理 (error handling)
+
+### 4. Comprehensive Application / 综合应用 (Comprehensive Application) (10)
+
+#### `10_comprehensive_demo.dart` - Comprehensive Application Example / 综合应用示例 (Comprehensive Application Example)
+- **Function / 功能 (Function)**: Complete application scenario demonstration / 完整的应用场景演示 (complete application scenario demonstration)
+- **Features / 特点 (Features)**: Practical application integrating all features / 集成所有功能的实际应用 (practical application integrating all features)
+- **Includes / 包含 (Includes)**:
+  - User management system / 用户管理系统 (user management system)
+  - File management system / 文件管理系统 (file management system)
+  - Data synchronization service / 数据同步服务 (data synchronization service)
+  - Notification system / 通知系统 (notification system)
+  - Performance monitoring / 性能监控 (performance monitoring)
+  - Error recovery / 错误恢复 (error recovery)
+
+## 🚀 Quick Start / 快速开始 (Quick Start)
+
+### Run Individual Examples / 运行单个示例 (Run Individual Examples)
+
 ```bash
-# 在项目根目录运行
-flutter test test/test_suite.dart
+# Run basic examples / 运行基础示例
+flutter test test/01_basic_demo.dart
+
+# Run advanced feature examples / 运行高级功能示例
+flutter test test/02_advanced_demo.dart
+
+# Run file operation examples / 运行文件操作示例
+flutter test test/03_file_operations_demo.dart
 ```
 
-### 运行特定测试
-```bash
-# 运行简单测试示例
-flutter test test/simple_exception_test.dart
-
-# 运行完整异常处理测试
-flutter test test/unified_exception_test.dart
-```
-
-### 运行单个测试用例
-```bash
-# 运行特定的测试组
-flutter test test/simple_exception_test.dart --name "测试基本异常转换"
-```
-
-## 测试覆盖率
+### Run All Examples / 运行所有示例 (Run All Examples)
 
 ```bash
-# 生成测试覆盖率报告
-flutter test --coverage
+# Run all tests / 运行所有测试 (run all tests)
+flutter test test/
 
-# 查看覆盖率报告（需要安装 lcov）
-genhtml coverage/lcov.info -o coverage/html
-open coverage/html/index.html
+# Run specific pattern tests / 运行特定模式的测试 (run specific pattern tests)
+flutter test test/ --name="Basic Features"
 ```
 
-## 使用示例
+## 📋 Feature Overview / 功能特性总览 (Feature Overview)
 
-### 1. 基本测试用法
+### Core Features / 核心功能 (Core Features)
+- ✅ HTTP/HTTPS request support / HTTP/HTTPS 请求支持 (HTTP/HTTPS request support)
+- ✅ RESTful API support / RESTful API 支持 (RESTful API support)
+- ✅ GraphQL support / GraphQL 支持 (GraphQL support)
+- ✅ WebSocket real-time communication / WebSocket 实时通信 (WebSocket real-time communication)
+- ✅ File upload/download / 文件上传/下载 (file upload/download)
+- ✅ Request/response interceptors / 请求/响应拦截器 (request/response interceptors)
+- ✅ Intelligent cache system / 智能缓存系统 (intelligent cache system)
+- ✅ Exception handling mechanism / 异常处理机制 (exception handling mechanism)
+- ✅ Concurrency control / 并发控制 (concurrency control)
+- ✅ Request retry / 请求重试 (request retry)
+- ✅ Timeout control / 超时控制 (timeout control)
+- ✅ Request priority / 请求优先级 (request priority)
 
+### Advanced Features / 高级特性 (Advanced Features)
+- 🔄 Automatic retry mechanism / 自动重试机制 (automatic retry mechanism)
+- 📦 Intelligent cache strategies / 智能缓存策略 (intelligent cache strategies)
+- 🔐 Authentication and authorization / 认证和授权 (authentication and authorization)
+- 📊 Performance monitoring / 性能监控 (performance monitoring)
+- 🚨 Error recovery / 错误恢复 (error recovery)
+- 🔄 Data synchronization / 数据同步 (data synchronization)
+- 📱 Offline support / 离线支持 (offline support)
+- 🎯 Request deduplication / 请求去重 (request deduplication)
+- 📈 Statistical analysis / 统计分析 (statistical analysis)
+- 🛡️ Security protection / 安全防护 (security protection)
+
+## 🎯 Use Cases / 使用场景 (Use Cases)
+
+### 1. Simple Applications / 简单应用 (Simple Applications)
+- Basic API calls / 基础的 API 调用 (basic API calls)
+- Simple data retrieval / 简单的数据获取 (simple data retrieval)
+- Basic error handling / 基本的错误处理 (basic error handling)
+
+**Recommended Examples / 推荐示例 (Recommended Examples)**: `01_basic_demo.dart`
+
+### 2. Medium Applications / 中型应用 (Medium Applications)
+- User authentication system / 用户认证系统 (user authentication system)
+- File management functionality / 文件管理功能 (file management functionality)
+- Cache optimization / 缓存优化 (cache optimization)
+- Error recovery / 错误恢复 (error recovery)
+
+**Recommended Examples / 推荐示例 (Recommended Examples)**: `02_advanced_demo.dart`, `04_interceptors_demo.dart`, `06_cache_demo.dart`
+
+### 3. Large Applications / 大型应用 (Large Applications)
+- High-concurrency processing / 高并发处理 (high-concurrency processing)
+- Real-time communication / 实时通信 (real-time communication)
+- Complex business logic / 复杂的业务逻辑 (complex business logic)
+- Performance optimization / 性能优化 (performance optimization)
+
+**Recommended Examples / 推荐示例 (Recommended Examples)**: `07_concurrent_demo.dart`, `08_websocket_demo.dart`, `10_comprehensive_demo.dart`
+
+### 4. Enterprise Applications / 企业级应用 (Enterprise Applications)
+- Microservice architecture / 微服务架构 (microservice architecture)
+- Data synchronization / 数据同步 (data synchronization)
+- Monitoring and analysis / 监控和分析 (monitoring and analysis)
+- Security and compliance / 安全和合规 (security and compliance)
+
+**Recommended Examples / 推荐示例 (Recommended Examples)**: `09_graphql_demo.dart`, `10_comprehensive_demo.dart`
+
+## 📖 Learning Path / 学习路径 (Learning Path)
+
+### Beginner Path / 初学者路径 (Beginner Path)
+1. `01_basic_demo.dart` - Understand basic concepts / 了解基础概念 (understand basic concepts)
+2. `03_file_operations_demo.dart` - Learn file operations / 学习文件操作 (learn file operations)
+3. `05_exception_handling_demo.dart` - Master error handling / 掌握错误处理 (master error handling)
+
+### Advanced Path / 进阶路径 (Advanced Path)
+1. `02_advanced_demo.dart` - Advanced features / 高级功能 (advanced features)
+2. `04_interceptors_demo.dart` - Interceptor system / 拦截器系统 (interceptor system)
+3. `06_cache_demo.dart` - Cache mechanism / 缓存机制 (cache mechanism)
+
+### Expert Path / 专家路径 (Expert Path)
+1. `07_concurrent_demo.dart` - Concurrency processing / 并发处理 (concurrency processing)
+2. `08_websocket_demo.dart` - Real-time communication / 实时通信 (real-time communication)
+3. `09_graphql_demo.dart` - GraphQL
+4. `10_comprehensive_demo.dart` - Comprehensive application / 综合应用 (comprehensive application)
+
+## 🔧 Configuration Guide / 配置说明 (Configuration Guide)
+
+### Basic Configuration / 基础配置 (Basic Configuration)
 ```dart
-import 'package:test/test.dart';
-import 'package:bzy_network_framework/bzy_network_framework.dart';
-import 'test_config.dart';
-
-void main() {
-  group('我的异常处理测试', () {
-    setUp(() async {
-      await TestConfig.setupTestEnvironment();
-    });
-    
-    tearDown(() async {
-      await TestConfig.cleanupTestEnvironment();
-    });
-    
-    test('测试自定义异常', () async {
-      // 创建异常
-      final error = TestExceptionGenerator.createCustomException(
-        type: ExceptionType.client,
-        code: ErrorCode.validationError,
-        message: '测试异常',
-      );
-      
-      // 处理异常
-      final result = await UnifiedExceptionHandler.instance
-          .handleException(error);
-      
-      // 验证结果
-      TestAssertions.assertException(
-        result,
-        expectedType: ExceptionType.client,
-        expectedCode: ErrorCode.validationError,
-      );
-    });
-  });
-}
+await UnifiedNetworkFramework.instance.initialize(
+  baseUrl: 'https://api.example.com',
+  config: {
+    'enableLogging': true,
+    'enableCache': true,
+    'defaultTimeout': 30000,
+  },
+);
 ```
 
-### 2. 性能测试用法
-
+### Advanced Configuration / 高级配置 (Advanced Configuration)
 ```dart
-test('性能测试示例', () async {
-  final monitor = TestPerformanceMonitor();
-  
-  monitor.start();
-  
-  // 执行需要测试性能的代码
-  for (int i = 0; i < 1000; i++) {
-    final error = TestExceptionGenerator.createTimeoutException();
-    await UnifiedExceptionHandler.instance.handleException(error);
-  }
-  
-  final duration = monitor.stop();
-  
-  // 验证性能要求
-  expect(duration.inMilliseconds, lessThan(1000)); // 1秒内完成
-  expect(monitor.averageDuration.inMicroseconds, lessThan(1000)); // 平均1ms内
+await UnifiedNetworkFramework.instance.initialize(
+  baseUrl: 'https://api.example.com',
+  config: {
+    'enableLogging': true,
+    'enableCache': true,
+    'maxConcurrentRequests': 10,
+    'defaultTimeout': 30000,
+    'retryCount': 3,
+    'retryDelay': 1000,
+    'cacheMaxSize': 100 * 1024 * 1024, // 100MB
+    'enableGzip': true,
+    'enableHttp2': true,
+  },
+);
+```
+
+## 🐛 Debugging Tips / 调试技巧 (Debugging Tips)
+
+### Enable Detailed Logging / 启用详细日志 (Enable Detailed Logging)
+```dart
+// Enable logging during initialization / 在初始化时启用日志 (enable logging during initialization)
+config['enableLogging'] = true;
+config['logLevel'] = 'debug';
+```
+
+### Performance Monitoring / 性能监控 (Performance Monitoring)
+```dart
+// Add performance monitoring interceptor / 添加性能监控拦截器 (add performance monitoring interceptor)
+framework.addGlobalInterceptor(PerformanceInterceptor());
+```
+
+### Error Tracking / 错误追踪 (Error Tracking)
+```dart
+// Register global error handler / 注册全局错误处理器 (register global error handler)
+UnifiedExceptionHandler.instance.registerGlobalHandler((error, request) {
+  print('Global Error: $error');
+  return true;
 });
 ```
 
-### 3. 模拟网络请求测试
+## 📊 Performance Optimization Recommendations / 性能优化建议 (Performance Optimization Recommendations)
 
-```dart
-test('模拟网络请求测试', () async {
-  final request = TestApiRequest(
-    endpoint: '/users/123',
-    requestMethod: HttpMethod.get,
-    expectedStatusCode: 404, // 期望404错误
-  );
-  
-  try {
-    final framework = UnifiedNetworkFramework.instance;
-    await framework.execute(request);
-    fail('应该抛出异常');
-  } catch (e) {
-    expect(e, isA<DioException>());
-    final dioError = e as DioException;
-    expect(dioError.error, isA<UnifiedException>());
-  }
-});
-```
+### 1. Cache Strategy / 缓存策略 (Cache Strategy)
+- Enable cache for frequently accessed data / 为频繁访问的数据启用缓存 (enable cache for frequently accessed data)
+- Set reasonable cache expiration time / 设置合理的缓存过期时间 (set reasonable cache expiration time)
+- Use memory cache to improve response speed / 使用内存缓存提高响应速度 (use memory cache to improve response speed)
 
-## 最佳实践
+### 2. Concurrency Control / 并发控制 (Concurrency Control)
+- Limit the number of concurrent requests / 限制同时进行的请求数量 (limit the number of concurrent requests)
+- Use request queue management / 使用请求队列管理 (use request queue management)
+- Implement request deduplication / 实现请求去重 (implement request deduplication)
 
-### 1. 测试组织
-- 使用 `group` 组织相关测试
-- 使用 `setUp` 和 `tearDown` 管理测试环境
-- 使用描述性的测试名称
+### 3. Network Optimization / 网络优化 (Network Optimization)
+- Enable GZIP compression / 启用 GZIP 压缩 (enable GZIP compression)
+- Use HTTP/2 / 使用 HTTP/2 (use HTTP/2)
+- Set reasonable timeout values / 合理设置超时时间 (set reasonable timeout values)
 
-### 2. 异常测试
-- 使用 `TestExceptionGenerator` 生成标准异常
-- 使用 `TestAssertions` 进行断言
-- 测试异常的所有重要属性
+### 4. Error Handling / 错误处理 (Error Handling)
+- Implement intelligent retry / 实现智能重试 (implement intelligent retry)
+- Provide fallback solutions / 提供降级方案 (provide fallback solutions)
+- Record detailed error information / 记录详细的错误信息 (record detailed error information)
 
-### 3. 性能测试
-- 使用 `TestPerformanceMonitor` 监控性能
-- 设置合理的性能期望
-- 测试大量数据的处理能力
+## 🤝 Contributing Guide / 贡献指南 (Contributing Guide)
 
-### 4. 集成测试
-- 测试与网络框架的集成
-- 测试全局异常处理器
-- 测试异常统计功能
+If you want to contribute to the example code, please follow these steps: / 如果您想为示例代码做出贡献，请遵循以下步骤 (if you want to contribute to the example code, please follow these steps)：
 
-## 故障排除
+1. Fork the project / Fork 项目 (fork the project)
+2. Create feature branch / 创建功能分支 (create feature branch)
+3. Add new examples or improve existing examples / 添加新的示例或改进现有示例 (add new examples or improve existing examples)
+4. Ensure code quality and test coverage / 确保代码质量和测试覆盖率 (ensure code quality and test coverage)
+5. Submit Pull Request / 提交 Pull Request (submit pull request)
 
-### 常见问题
+## 📞 Support and Feedback / 支持和反馈 (Support and Feedback)
 
-1. **测试环境初始化失败**
-   - 检查网络连接
-   - 确保测试配置正确
-   - 查看错误日志
+If you encounter problems or have suggestions for improvement during use, please: / 如果您在使用过程中遇到问题或有改进建议，请 (if you encounter problems or have suggestions for improvement during use, please)：
 
-2. **异常类型不匹配**
-   - 检查 ErrorCode 枚举定义
-   - 确保使用正确的异常类型
-   - 查看异常转换逻辑
+1. Check existing example code / 查看现有的示例代码 (check existing example code)
+2. Read framework documentation / 阅读框架文档 (read framework documentation)
+3. Submit Issue or Pull Request / 提交 Issue 或 Pull Request (submit issue or pull request)
+4. Contact maintenance team / 联系维护团队 (contact maintenance team)
 
-3. **性能测试失败**
-   - 调整性能期望值
-   - 检查测试环境性能
-   - 优化测试代码
+## 📄 License / 许可证 (License)
 
-### 调试技巧
+This example code follows the MIT License. For details, please refer to the LICENSE file. / 本示例代码遵循 MIT 许可证，详情请参阅 LICENSE 文件 (this example code follows the MIT License, for details please refer to the LICENSE file)。
 
-1. **启用详细日志**
-   ```dart
-   TestConfig.testNetworkConfig['logLevel'] = LogLevel.debug;
-   ```
+---
 
-2. **打印异常详情**
-   ```dart
-   print('异常详情: ${exception.toString()}');
-   print('异常类型: ${exception.type}');
-   print('错误码: ${exception.code}');
-   ```
+**Note**: These examples are for demonstration purposes only. Please adjust according to specific requirements in actual use. / **注意**: 这些示例仅用于演示目的，实际使用时请根据具体需求进行调整。
 
-3. **检查异常统计**
-   ```dart
-   final stats = UnifiedExceptionHandler.instance.getExceptionStats();
-   print('异常统计: $stats');
-   ```
-
-## 贡献指南
-
-如果您想添加新的测试用例或改进现有测试：
-
-1. 遵循现有的代码风格
-2. 添加适当的注释和文档
-3. 确保测试覆盖率
-4. 运行所有测试确保没有回归
-5. 更新相关文档
-
-## 相关文档
-
-- [统一异常处理文档](../docs/UNIFIED_EXCEPTION_HANDLING.md)
-- [快速开始指南](../docs/QUICK_START_GUIDE.md)
-- [项目概览](../docs/PROJECT_OVERVIEW.md)
-- [使用示例](../example/unified_exception_example.dart)
+**Happy Coding! 🎉**

@@ -156,12 +156,16 @@ class NetworkException implements Exception {
   final int? statusCode;
   final String? errorCode;
   final dynamic originalError;
+  final dynamic originalData;
+  final int retryCount;
   
   const NetworkException({
     required this.message,
     this.statusCode,
     this.errorCode,
     this.originalError,
+    this.originalData,
+    this.retryCount = 0,
   });
   
   /// Create from UnifiedException

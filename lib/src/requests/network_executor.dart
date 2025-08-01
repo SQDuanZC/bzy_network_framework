@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:meta/meta.dart';
 import 'base_network_request.dart';
 import '../model/network_response.dart';
 import '../config/network_config.dart';
@@ -197,36 +198,77 @@ class NetworkExecutor {
     }
   }
   
-  /// Enqueue request
+  /// Enqueue request based on priority
   Future<NetworkResponse<T>> _enqueueRequest<T>(BaseNetworkRequest<T> request) async {
-    // Execute request directly, without using queue mechanism (simplified implementation)
-    return await _executeRequest(request);
+    final completer = Completer<NetworkResponse<T>>();
+    final requestKey = _getRequestKey(request);
+    
+    // Add request to appropriate priority queue
+    _requestQueues[request.priority]!.add(request);
+    _pendingRequests[requestKey] = completer;
+    
+    // Start processing queue if not already processing
+    if (!_isProcessingQueue) {
+      unawaited(_processRequestQueue());
+    }
+    
+    return await completer.future;
   }
   
   /// Process request queue
-  void _processRequestQueue() async {
+  Future<void> _processRequestQueue() async {
     if (_isProcessingQueue) return;
     
     _isProcessingQueue = true;
     
     try {
-      // Process requests by priority
-      for (final priority in RequestPriority.values.reversed) {
-        final queue = _requestQueues[priority]!;
-        
-        while (queue.isNotEmpty) {
-          final request = queue.removeAt(0);
-          await _executeRequest(request);
+      // Keep processing until all queues are empty
+      while (_hasQueuedRequests()) {
+        // Process requests by priority (critical -> high -> normal -> low)
+        for (final priority in RequestPriority.values.reversed) {
+          final queue = _requestQueues[priority]!;
           
-          // Add small delay to avoid too frequent requests
-          if (priority != RequestPriority.critical) {
-            await Future.delayed(const Duration(milliseconds: 10));
+          if (queue.isNotEmpty) {
+            final request = queue.removeAt(0);
+            final requestKey = _getRequestKey(request);
+            
+            try {
+              final result = await _executeRequest(request);
+              
+              // Complete the pending request
+              if (_pendingRequests.containsKey(requestKey)) {
+                _pendingRequests[requestKey]!.complete(result);
+                _pendingRequests.remove(requestKey);
+              }
+            } catch (error) {
+              // Complete with error
+              if (_pendingRequests.containsKey(requestKey)) {
+                _pendingRequests[requestKey]!.completeError(error);
+                _pendingRequests.remove(requestKey);
+              }
+            }
+            
+            // Add small delay to avoid too frequent requests
+            if (priority != RequestPriority.critical) {
+              await Future.delayed(const Duration(milliseconds: 10));
+            }
+            
+            // Break to restart priority checking from highest priority
+            break;
           }
         }
+        
+        // Small delay before checking queues again
+        await Future.delayed(const Duration(milliseconds: 1));
       }
     } finally {
       _isProcessingQueue = false;
     }
+  }
+  
+  /// Check if there are any queued requests
+  bool _hasQueuedRequests() {
+    return _requestQueues.values.any((queue) => queue.isNotEmpty);
   }
   
   /// Execute batch requests
