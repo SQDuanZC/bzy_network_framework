@@ -135,151 +135,158 @@ class InterceptorManager {
   }
   
   /// 执行请求拦截
-  Future<RequestOptions> interceptRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
-    var currentOptions = options;
-    
-    for (final name in _executionOrder) {
-      final interceptor = _interceptors[name];
-      final config = _configs[name];
-      
-      if (interceptor == null || config == null || !config.enabled) {
-        continue;
-      }
-      
-      final startTime = DateTime.now();
-      try {
-        // 检查拦截器是否支持请求拦截
-        if (interceptor.supportsRequestInterception) {
-          currentOptions = await _executeWithTimeout(
-            () => interceptor.onRequest(currentOptions, handler),
-            config.timeout,
-            '请求拦截器 "$name" 超时',
-          );
+  void interceptRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    _executeRequestChain(0, options, handler);
+  }
+
+  void _executeRequestChain(int index, RequestOptions options, RequestInterceptorHandler handler) {
+    if (index >= _executionOrder.length) {
+      // All interceptors have been processed, call the final handler
+      handler.next(options);
+      return;
+    }
+
+    final name = _executionOrder[index];
+    final interceptor = _interceptors[name];
+    final config = _configs[name];
+
+    if (interceptor == null || config == null || !config.enabled) {
+      _executeRequestChain(index + 1, options, handler);
+      return;
+    }
+
+    final startTime = DateTime.now();
+    try {
+      final customHandler = CustomRequestInterceptorHandler(
+        onNext: (req) {
+          final duration = DateTime.now().difference(startTime);
+          _statistics.recordExecution(name, InterceptorType.request, duration, true);
+          _executeRequestChain(index + 1, req, handler);
+        },
+        onError: (err) {
+          final duration = DateTime.now().difference(startTime);
+          _statistics.recordExecution(name, InterceptorType.request, duration, false);
+          handler.reject(err);
         }
-        
-        final duration = DateTime.now().difference(startTime);
-        _statistics.recordExecution(name, InterceptorType.request, duration, true);
-        
-      } catch (e) {
-        final duration = DateTime.now().difference(startTime);
-        _statistics.recordExecution(name, InterceptorType.request, duration, false);
-        
-        if (config.continueOnError) {
-          if (kDebugMode) {
-            debugPrint('请求拦截器 "$name" 执行失败，继续执行: $e');
-          }
-          continue;
-        } else {
-          if (kDebugMode) {
-            debugPrint('请求拦截器 "$name" 执行失败，中断执行: $e');
-          }
-          rethrow;
+      );
+      interceptor.onRequest(options, customHandler);
+    } catch (e) {
+      final duration = DateTime.now().difference(startTime);
+      _statistics.recordExecution(name, InterceptorType.request, duration, false);
+      if (config.continueOnError) {
+        if (kDebugMode) {
+          debugPrint('请求拦截器 "$name" 执行失败，继续执行: $e');
         }
+        _executeRequestChain(index + 1, options, handler);
+      } else {
+        if (kDebugMode) {
+          debugPrint('请求拦截器 "$name" 执行失败，中断执行: $e');
+        }
+        handler.reject(e is DioException ? e : DioException(requestOptions: options, error: e));
       }
     }
-    
-    return currentOptions;
   }
   
   /// 执行响应拦截
-  Future<Response> interceptResponse(
-    Response response,
-    ResponseInterceptorHandler handler,
-  ) async {
-    var currentResponse = response;
-    
-    // 响应拦截器按相反顺序执行
-    for (final name in _executionOrder.reversed) {
-      final interceptor = _interceptors[name];
-      final config = _configs[name];
-      
-      if (interceptor == null || config == null || !config.enabled) {
-        continue;
-      }
-      
-      final startTime = DateTime.now();
-      try {
-        // 检查拦截器是否支持响应拦截
-        if (interceptor.supportsResponseInterception) {
-          currentResponse = await _executeWithTimeout(
-            () => interceptor.onResponse(currentResponse, handler),
-            config.timeout,
-            '响应拦截器 "$name" 超时',
-          );
+  void interceptResponse(Response response, ResponseInterceptorHandler handler) {
+    _executeResponseChain(_executionOrder.length - 1, response, handler);
+  }
+
+  void _executeResponseChain(int index, Response response, ResponseInterceptorHandler handler) {
+    if (index < 0) {
+      handler.next(response);
+      return;
+    }
+
+    final name = _executionOrder[index];
+    final interceptor = _interceptors[name];
+    final config = _configs[name];
+
+    if (interceptor == null || config == null || !config.enabled) {
+      _executeResponseChain(index - 1, response, handler);
+      return;
+    }
+
+    final startTime = DateTime.now();
+    try {
+      final customHandler = CustomResponseInterceptorHandler(
+        onNext: (res) {
+          final duration = DateTime.now().difference(startTime);
+          _statistics.recordExecution(name, InterceptorType.response, duration, true);
+          _executeResponseChain(index - 1, res, handler);
+        },
+        onError: (err) {
+          final duration = DateTime.now().difference(startTime);
+          _statistics.recordExecution(name, InterceptorType.response, duration, false);
+          handler.reject(err);
         }
-        
-        final duration = DateTime.now().difference(startTime);
-        _statistics.recordExecution(name, InterceptorType.response, duration, true);
-        
-      } catch (e) {
-        final duration = DateTime.now().difference(startTime);
-        _statistics.recordExecution(name, InterceptorType.response, duration, false);
-        
-        if (config.continueOnError) {
-          if (kDebugMode) {
-            debugPrint('响应拦截器 "$name" 执行失败，继续执行: $e');
-          }
-          continue;
-        } else {
-          if (kDebugMode) {
-            debugPrint('响应拦截器 "$name" 执行失败，中断执行: $e');
-          }
-          rethrow;
+      );
+      interceptor.onResponse(response, customHandler);
+    } catch (e) {
+      final duration = DateTime.now().difference(startTime);
+      _statistics.recordExecution(name, InterceptorType.response, duration, false);
+      if (config.continueOnError) {
+        if (kDebugMode) {
+          debugPrint('响应拦截器 "$name" 执行失败，继续执行: $e');
         }
+        _executeResponseChain(index - 1, response, handler);
+      } else {
+        if (kDebugMode) {
+          debugPrint('响应拦截器 "$name" 执行失败，中断执行: $e');
+        }
+        handler.reject(e is DioException ? e : DioException(requestOptions: response.requestOptions, error: e));
       }
     }
-    
-    return currentResponse;
   }
   
   /// 执行错误拦截
-  Future<void> interceptError(
-    DioException err,
-    ErrorInterceptorHandler handler,
-  ) async {
-    var currentError = err;
-    
-    for (final name in _executionOrder) {
-      final interceptor = _interceptors[name];
-      final config = _configs[name];
-      
-      if (interceptor == null || config == null || !config.enabled) {
-        continue;
-      }
-      
-      final startTime = DateTime.now();
-      try {
-        // 检查拦截器是否支持错误拦截
-        if (interceptor.supportsErrorInterception) {
-          await _executeWithTimeout(
-            () => interceptor.onError(currentError, handler),
-            config.timeout,
-            '错误拦截器 "$name" 超时',
-          );
+  void interceptError(DioException err, ErrorInterceptorHandler handler) {
+    _executeErrorChain(0, err, handler);
+  }
+
+  void _executeErrorChain(int index, DioException err, ErrorInterceptorHandler handler) {
+    if (index >= _executionOrder.length) {
+      handler.next(err);
+      return;
+    }
+
+    final name = _executionOrder[index];
+    final interceptor = _interceptors[name];
+    final config = _configs[name];
+
+    if (interceptor == null || config == null || !config.enabled) {
+      _executeErrorChain(index + 1, err, handler);
+      return;
+    }
+
+    final startTime = DateTime.now();
+    try {
+      final customHandler = CustomErrorInterceptorHandler(
+        onNext: (error) {
+          final duration = DateTime.now().difference(startTime);
+          _statistics.recordExecution(name, InterceptorType.error, duration, true);
+          _executeErrorChain(index + 1, error, handler);
+        },
+        onError: (error) {
+          final duration = DateTime.now().difference(startTime);
+          _statistics.recordExecution(name, InterceptorType.error, duration, false);
+          handler.reject(error);
         }
-        
-        final duration = DateTime.now().difference(startTime);
-        _statistics.recordExecution(name, InterceptorType.error, duration, true);
-        
-      } catch (e) {
-        final duration = DateTime.now().difference(startTime);
-        _statistics.recordExecution(name, InterceptorType.error, duration, false);
-        
-        if (config.continueOnError) {
-          if (kDebugMode) {
-            debugPrint('错误拦截器 "$name" 执行失败，继续执行: $e');
-          }
-          continue;
-        } else {
-          if (kDebugMode) {
-            debugPrint('错误拦截器 "$name" 执行失败，中断执行: $e');
-          }
-          // 对于错误拦截器，即使失败也不重新抛出异常
-          continue;
+      );
+      interceptor.onError(err, customHandler);
+    } catch (e) {
+      final duration = DateTime.now().difference(startTime);
+      _statistics.recordExecution(name, InterceptorType.error, duration, false);
+      if (config.continueOnError) {
+        if (kDebugMode) {
+          debugPrint('错误拦截器 "$name" 执行失败，继续执行: $e');
         }
+        _executeErrorChain(index + 1, err, handler);
+      } else {
+        if (kDebugMode) {
+          debugPrint('错误拦截器 "$name" 执行失败，中断执行: $e');
+        }
+        handler.reject(e is DioException ? e : DioException(requestOptions: err.requestOptions, error: e));
       }
     }
   }
@@ -303,18 +310,6 @@ class InterceptorManager {
     _configs[name]!.priority = priority;
   }
   
-  /// 带超时的执行
-  Future<T> _executeWithTimeout<T>(
-    Future<T> Function() function,
-    Duration timeout,
-    String timeoutMessage,
-  ) async {
-    return await function().timeout(
-      timeout,
-      onTimeout: () => throw TimeoutException(timeoutMessage, timeout),
-    );
-  }
-  
   /// 获取拦截器状态
   Map<String, dynamic> getInterceptorStatus() {
     final status = <String, dynamic>{};
@@ -328,9 +323,6 @@ class InterceptorManager {
         'priority': config?.priority ?? 0,
         'timeout': config?.timeout.inMilliseconds ?? 0,
         'continueOnError': config?.continueOnError ?? false,
-        'supportsRequest': interceptor?.supportsRequestInterception ?? false,
-        'supportsResponse': interceptor?.supportsResponseInterception ?? false,
-        'supportsError': interceptor?.supportsErrorInterception ?? false,
       };
     }
     
@@ -351,7 +343,7 @@ class InterceptorManager {
 }
 
 /// 插件拦截器基类
-abstract class PluginInterceptor {
+abstract class PluginInterceptor extends Interceptor {
   /// 拦截器名称
   String get name;
   
@@ -360,39 +352,6 @@ abstract class PluginInterceptor {
   
   /// 拦截器描述
   String get description;
-  
-  /// 是否支持请求拦截
-  bool get supportsRequestInterception => false;
-  
-  /// 是否支持响应拦截
-  bool get supportsResponseInterception => false;
-  
-  /// 是否支持错误拦截
-  bool get supportsErrorInterception => false;
-  
-  /// 请求拦截
-  Future<RequestOptions> onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
-    return options;
-  }
-  
-  /// 响应拦截
-  Future<Response> onResponse(
-    Response response,
-    ResponseInterceptorHandler handler,
-  ) async {
-    return response;
-  }
-  
-  /// 错误拦截
-  Future<void> onError(
-    DioException err,
-    ErrorInterceptorHandler handler,
-  ) async {
-    // 默认不处理错误
-  }
   
   /// 初始化拦截器
   Future<void> initialize() async {
@@ -565,6 +524,66 @@ class BuiltInInterceptors {
   }
 }
 
+class CustomRequestInterceptorHandler extends RequestInterceptorHandler {
+  final void Function(RequestOptions) _onNext;
+  final void Function(DioException) _onError;
+
+  CustomRequestInterceptorHandler({
+    required void Function(RequestOptions) onNext,
+    required void Function(DioException) onError,
+  }) : _onNext = onNext, _onError = onError;
+
+  @override
+  void next(RequestOptions requestOptions) {
+    _onNext(requestOptions);
+  }
+
+  @override
+  void reject(DioException error, [bool callFollowingErrorInterceptors = true]) {
+    _onError(error);
+  }
+}
+
+class CustomResponseInterceptorHandler extends ResponseInterceptorHandler {
+  final void Function(Response) _onNext;
+  final void Function(DioException) _onError;
+
+  CustomResponseInterceptorHandler({
+    required void Function(Response) onNext,
+    required void Function(DioException) onError,
+  }) : _onNext = onNext, _onError = onError;
+
+  @override
+  void next(Response response) {
+    _onNext(response);
+  }
+
+  @override
+  void reject(DioException error, [bool callFollowingErrorInterceptors = true]) {
+    _onError(error);
+  }
+}
+
+class CustomErrorInterceptorHandler extends ErrorInterceptorHandler {
+  final void Function(DioException) _onNext;
+  final void Function(DioException) _onError;
+
+  CustomErrorInterceptorHandler({
+    required void Function(DioException) onNext,
+    required void Function(DioException) onError,
+  }) : _onNext = onNext, _onError = onError;
+
+  @override
+  void next(DioException err) {
+    _onNext(err);
+  }
+
+  @override
+  void reject(DioException error) {
+    _onError(error);
+  }
+}
+
 /// 缓存拦截器
 class CacheInterceptor extends PluginInterceptor {
   @override
@@ -713,7 +732,19 @@ class RetryInterceptor extends PluginInterceptor {
   String get description => '重试拦截器';
   
   @override
+  bool get supportsRequestInterception => true;
+  
+  @override
   bool get supportsErrorInterception => true;
+  
+  @override
+  Future<RequestOptions> onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    // 直接返回请求选项，不做任何处理
+    return options;
+  }
   
   @override
   Future<void> onError(

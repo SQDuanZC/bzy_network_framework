@@ -1,29 +1,29 @@
-/// 演示如何使用 NetworkConfigPreset 枚举的简化示例
-/// 这是一个纯 Dart 示例，不依赖 Flutter
+/// Demonstrates how to use NetworkConfigPreset enum with simplified examples
+/// This is a pure Dart example that does not depend on Flutter
 
 // 直接导入网络配置文件
 import '../../lib/src/config/network_config.dart';
 
 void main() {
-  print('=== NetworkConfigPreset 枚举使用示例 ===');
+  print('=== NetworkConfigPreset Enum Usage Examples ===');
   print('');
   
-  // 1. 获取所有可用的预设枚举
-  print('1. 所有可用预设:');
+  // 1. Get all available preset enums
+  print('1. All available presets:');
   final allPresets = NetworkConfigPreset.values;
   for (final preset in allPresets) {
     print('   - ${preset.name}: ${preset.value}');
   }
   print('');
   
-  // 2. 通过枚举获取配置
-  print('2. 通过枚举获取配置:');
+  // 2. Get configuration through enum
+  print('2. Get configuration through enum:');
   final devConfig = NetworkConfigPreset.development.getConfig();
   print('   开发环境配置: $devConfig');
   print('');
   
-  // 3. 字符串转枚举
-  print('3. 字符串转枚举:');
+  // 3. String to enum conversion
+  print('3. String to enum conversion:');
   final preset1 = NetworkConfigPreset.fromString('production');
   print('   production 预设: $preset1');
   
@@ -31,36 +31,36 @@ void main() {
   print('   无效预设: $preset2');
   print('');
   
-  // 4. 枚举比较
-  print('4. 枚举比较:');
+  // 4. Enum comparison
+  print('4. Enum comparison:');
   final dev1 = NetworkConfigPreset.development;
   final dev2 = NetworkConfigPreset.fromString('development');
   print('   development == development: ${dev1 == dev2}');
   print('');
   
-  // 5. 获取特定预设的配置
-  print('5. 获取特定预设配置:');
+  // 5. Get configuration for specific preset
+  print('5. Get configuration for specific preset:');
   final prodConfig = NetworkConfigPreset.production.getConfig();
   print('   生产环境 baseUrl: ${prodConfig?['baseUrl']}');
   print('   生产环境 timeout: ${prodConfig?['connectTimeout']}');
   print('');
   
-  print('=== 示例完成 ===');
+  print('=== Examples Complete ===');
 }
 
-/// 配置管理器示例
+/// Configuration manager example
 class SimpleConfigManager {
-  /// 使用枚举设置配置
+  /// Configure using enum
   static void configureForEnvironment(NetworkConfigPreset preset) {
     final config = preset.getConfig();
     if (config != null) {
-      print('配置环境: ${preset.name}');
+      print('Configuring environment: ${preset.name}');
       print('Base URL: ${config['baseUrl']}');
-      print('超时时间: ${config['connectTimeout']}ms');
+      print('Timeout: ${config['connectTimeout']}ms');
     }
   }
   
-  /// 获取所有环境名称
+  /// Get all environment names
   static List<String> getAllEnvironmentNames() {
     return NetworkConfigPreset.values.map((preset) => preset.name).toList();
   }

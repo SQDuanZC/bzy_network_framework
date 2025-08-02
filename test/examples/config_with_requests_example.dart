@@ -1,10 +1,9 @@
 import 'package:bzy_network_framework/bzy_network_framework.dart';
 
-/// 配置预设与网络请求结合使用示例 / Configuration Presets with Network Requests Example
+/// 配置预设与网络请求结合使用示例
 /// 演示如何在实际网络请求中应用不同的配置预设
-/// Demonstrates how to apply different configuration presets in actual network requests
 void main() async {
-  print('=== 配置预设与网络请求结合使用示例 / Configuration Presets with Network Requests Example ===\n');
+  print('=== 配置预设与网络请求结合使用示例 ===\n');
   
   // 示例1: 使用开发环境配置进行网络请求
   await _demonstrateDevelopmentConfig();
@@ -27,7 +26,7 @@ void main() async {
 
 /// 演示开发环境配置的使用
 Future<void> _demonstrateDevelopmentConfig() async {
-  print('--- 开发环境配置示例 / Development Environment Configuration Example ---');
+  print('--- 开发环境配置示例 ---');
   
   // 使用开发环境预设初始化框架
   NetworkConfig.instance.initializeFromPreset('development');
@@ -35,10 +34,10 @@ Future<void> _demonstrateDevelopmentConfig() async {
     baseUrl: 'https://jsonplaceholder.typicode.com',
   );
   
-  print('当前配置 / Current configuration:');
-  print('- 连接超时 / Connect timeout: ${NetworkConfig.instance.connectTimeout}ms');
-  print('- 日志启用 / Logging enabled: ${NetworkConfig.instance.enableLogging}');
-  print('- 重试次数 / Max retries: ${NetworkConfig.instance.maxRetries}');
+  print('当前配置:');
+  print('- 连接超时: ${NetworkConfig.instance.connectTimeout}ms');
+  print('- 日志启用: ${NetworkConfig.instance.enableLogging}');
+  print('- 重试次数: ${NetworkConfig.instance.maxRetries}');
   
   // 执行网络请求
   final request = SimpleApiRequest(endpoint: '/posts/1');
@@ -46,25 +45,25 @@ Future<void> _demonstrateDevelopmentConfig() async {
   
   try {
     final response = await executor.execute(request);
-    print('✅ 开发环境请求成功 / Development environment request successful: ${response.data?['title']}');
+    print('✅ 开发环境请求成功: ${response.data?['title']}');
   } catch (e) {
-    print('❌ 开发环境请求失败 / Development environment request failed: $e');
+    print('❌ 开发环境请求失败: $e');
   }
   print('');
 }
 
 /// 演示生产环境配置的使用
 Future<void> _demonstrateProductionConfig() async {
-  print('--- 生产环境配置示例 / Production Environment Configuration Example ---');
+  print('--- 生产环境配置示例 ---');
   
   // 切换到生产环境预设
   NetworkConfig.instance.initializeFromPreset('production');
   
-  print('当前配置 / Current configuration:');
-  print('- 连接超时 / Connect timeout: ${NetworkConfig.instance.connectTimeout}ms');
-  print('- 日志启用 / Logging enabled: ${NetworkConfig.instance.enableLogging}');
-  print('- 重试次数 / Max retries: ${NetworkConfig.instance.maxRetries}');
-  print('- 缓存启用 / Cache enabled: ${NetworkConfig.instance.enableCache}');
+  print('当前配置:');
+  print('- 连接超时: ${NetworkConfig.instance.connectTimeout}ms');
+  print('- 日志启用: ${NetworkConfig.instance.enableLogging}');
+  print('- 重试次数: ${NetworkConfig.instance.maxRetries}');
+  print('- 缓存启用: ${NetworkConfig.instance.enableCache}');
   
   // 执行网络请求
   final request = SimpleApiRequest(endpoint: '/posts/2');
@@ -72,24 +71,24 @@ Future<void> _demonstrateProductionConfig() async {
   
   try {
     final response = await executor.execute(request);
-    print('✅ 生产环境请求成功 / Production environment request successful: ${response.data?['title']}');
+    print('✅ 生产环境请求成功: ${response.data?['title']}');
   } catch (e) {
-    print('❌ 生产环境请求失败 / Production environment request failed: $e');
+    print('❌ 生产环境请求失败: $e');
   }
   print('');
 }
 
 /// 演示快速响应配置的使用
 Future<void> _demonstrateFastResponseConfig() async {
-  print('--- 快速响应配置示例 / Fast Response Configuration Example ---');
+  print('--- 快速响应配置示例 ---');
   
   // 切换到快速响应预设
   NetworkConfig.instance.initializeFromPreset('fastResponse');
   
-  print('当前配置 / Current configuration:');
-  print('- 连接超时 / Connect timeout: ${NetworkConfig.instance.connectTimeout}ms');
-  print('- 接收超时 / Receive timeout: ${NetworkConfig.instance.receiveTimeout}ms');
-  print('- 缓存启用 / Cache enabled: ${NetworkConfig.instance.enableCache}');
+  print('当前配置:');
+  print('- 连接超时: ${NetworkConfig.instance.connectTimeout}ms');
+  print('- 接收超时: ${NetworkConfig.instance.receiveTimeout}ms');
+  print('- 缓存启用: ${NetworkConfig.instance.enableCache}');
   
   // 执行多个快速请求
   final requests = [
@@ -106,25 +105,25 @@ Future<void> _demonstrateFastResponseConfig() async {
       requests.map((request) => executor.execute(request)),
     );
     stopwatch.stop();
-    print('✅ 快速响应请求完成 / Fast response requests completed，耗时 / Time taken: ${stopwatch.elapsedMilliseconds}ms');
-    print('   成功请求数 / Successful requests: ${responses.where((r) => r.success).length}/${responses.length}');
+    print('✅ 快速响应请求完成，耗时: ${stopwatch.elapsedMilliseconds}ms');
+    print('   成功请求数: ${responses.where((r) => r.success).length}/${responses.length}');
   } catch (e) {
-    print('❌ 快速响应请求失败 / Fast response requests failed: $e');
+    print('❌ 快速响应请求失败: $e');
   }
   print('');
 }
 
 /// 演示重负载配置的使用
 Future<void> _demonstrateHeavyLoadConfig() async {
-  print('--- 重负载配置示例 / Heavy Load Configuration Example ---');
+  print('--- 重负载配置示例 ---');
   
   // 切换到重负载预设
   NetworkConfig.instance.initializeFromPreset('heavyLoad');
   
-  print('当前配置 / Current configuration:');
-  print('- 连接超时 / Connect timeout: ${NetworkConfig.instance.connectTimeout}ms');
-  print('- 最大重试 / Max retries: ${NetworkConfig.instance.maxRetries}');
-  print('- 指数退避 / Exponential backoff: ${NetworkConfig.instance.enableExponentialBackoff}');
+  print('当前配置:');
+  print('- 连接超时: ${NetworkConfig.instance.connectTimeout}ms');
+  print('- 最大重试: ${NetworkConfig.instance.maxRetries}');
+  print('- 指数退避: ${NetworkConfig.instance.enableExponentialBackoff}');
   
   // 模拟重负载请求（可能失败的请求）
   final request = RetryableApiRequest(endpoint: '/posts/999999'); // 不存在的资源
@@ -132,24 +131,24 @@ Future<void> _demonstrateHeavyLoadConfig() async {
   
   try {
     final response = await executor.execute(request);
-    print('✅ 重负载请求成功 / Heavy load request successful: ${response.data}');
+    print('✅ 重负载请求成功: ${response.data}');
   } catch (e) {
-    print('❌ 重负载请求最终失败（经过重试）/ Heavy load request finally failed (after retries): $e');
+    print('❌ 重负载请求最终失败（经过重试）: $e');
   }
   print('');
 }
 
 /// 演示离线优先配置的使用
 Future<void> _demonstrateOfflineFirstConfig() async {
-  print('--- 离线优先配置示例 / Offline First Configuration Example ---');
+  print('--- 离线优先配置示例 ---');
   
   // 切换到离线优先预设
   NetworkConfig.instance.initializeFromPreset(NetworkConfigPreset.offlineFirst.value);
   
-  print('当前配置 / Current configuration:');
-  print('- 缓存启用 / Cache enabled: ${NetworkConfig.instance.enableCache}');
-  print('- 缓存时长 / Cache duration: ${NetworkConfig.instance.defaultCacheDuration}秒 / seconds');
-  print('- 连接超时 / Connect timeout: ${NetworkConfig.instance.connectTimeout}ms');
+  print('当前配置:');
+  print('- 缓存启用: ${NetworkConfig.instance.enableCache}');
+  print('- 缓存时长: ${NetworkConfig.instance.defaultCacheDuration}秒');
+  print('- 连接超时: ${NetworkConfig.instance.connectTimeout}ms');
   
   // 执行缓存友好的请求
   final request = CacheableApiRequest(endpoint: '/posts/6');
@@ -157,31 +156,31 @@ Future<void> _demonstrateOfflineFirstConfig() async {
   
   try {
     // 第一次请求（从网络获取）
-    print('第一次请求（从网络获取）/ First request (from network)...');
+    print('第一次请求（从网络获取）...');
     final response1 = await executor.execute(request);
-    print('✅ 首次请求成功 / First request successful: ${response1.data?['title']}');
+    print('✅ 首次请求成功: ${response1.data?['title']}');
     
     // 第二次请求（从缓存获取）
-    print('第二次请求（应该从缓存获取）/ Second request (should be from cache)...');
+    print('第二次请求（应该从缓存获取）...');
     final response2 = await executor.execute(request);
-    print('✅ 缓存请求成功 / Cache request successful: ${response2.data?['title']}');
+    print('✅ 缓存请求成功: ${response2.data?['title']}');
   } catch (e) {
-    print('❌ 离线优先请求失败 / Offline first request failed: $e');
+    print('❌ 离线优先请求失败: $e');
   }
   print('');
 }
 
 /// 演示动态配置切换
 Future<void> _demonstrateDynamicConfigSwitching() async {
-  print('--- 动态配置切换示例 / Dynamic Configuration Switching Example ---');
+  print('--- 动态配置切换示例 ---');
   
   // 获取所有可用预设
   final availablePresets = NetworkConfigPresets.getAvailablePresets();
-  print('可用预设 / Available presets: ${availablePresets.join(", ")}');
+  print('可用预设: ${availablePresets.join(", ")}');
   
   // 动态切换不同预设并执行请求
   for (final preset in ['development', 'production', 'fastResponse']) {
-    print('\n切换到预设 / Switching to preset: $preset');
+    print('\n切换到预设: $preset');
     NetworkConfig.instance.initializeFromPreset(preset);
     
     final request = SimpleApiRequest(endpoint: '/posts/${preset.hashCode % 10 + 1}');
@@ -189,13 +188,13 @@ Future<void> _demonstrateDynamicConfigSwitching() async {
     
     try {
       final response = await executor.execute(request);
-      print('✅ $preset 配置请求成功 / configuration request successful');
+      print('✅ $preset 配置请求成功');
     } catch (e) {
-      print('❌ $preset 配置请求失败 / configuration request failed: $e');
+      print('❌ $preset 配置请求失败: $e');
     }
   }
   
-  print('\n=== 配置预设与网络请求示例完成 / Configuration Presets with Network Requests Example Completed ===');
+  print('\n=== 配置预设与网络请求示例完成 ===');
 }
 
 /// 简单API请求类

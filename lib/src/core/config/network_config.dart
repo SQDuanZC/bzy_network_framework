@@ -16,6 +16,14 @@ class NetworkConfig {
   int retryDelay = 1000; // 重试延迟时间（毫秒）
   bool enableExponentialBackoff = true; // 是否启用指数退避重试
   bool enableLogging = true; // 是否启用日志
+
+  // 默认请求头
+  Map<String, String> defaultHeaders = {
+    'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+  };
   
   // 环境配置
   Environment _environment = Environment.development;

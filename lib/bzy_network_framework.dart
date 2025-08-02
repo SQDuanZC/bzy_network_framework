@@ -7,6 +7,7 @@ export 'src/config/network_config.dart';
 // 核心组件
 export 'src/requests/base_network_request.dart';
 export 'src/requests/network_executor.dart';
+export 'src/requests/batch_request.dart';
 
 // 缓存管理
 export 'src/core/cache/cache_manager.dart';

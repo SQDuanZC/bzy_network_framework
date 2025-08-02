@@ -146,4 +146,18 @@ class NetworkResponse<T> {
         'duration: ${duration}ms'
         '}';
   }
+
+  NetworkResponse<R> cast<R>() {
+    return NetworkResponse<R>(
+      data: data as R?,
+      statusCode: statusCode,
+      message: message,
+      success: success,
+      errorCode: errorCode,
+      headers: headers,
+      duration: duration,
+      fromCache: fromCache,
+      timestamp: timestamp,
+    );
+  }
 }

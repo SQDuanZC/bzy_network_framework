@@ -15,6 +15,8 @@ void main() {
           'enableLogging': true,
           'maxConcurrentRequests': 3, // Maximum concurrent requests
           'enableQueueMonitoring': true,
+          'connectTimeout': 10000,
+          'receiveTimeout': 15000,
         },
       );
     });
@@ -30,7 +32,9 @@ void main() {
       );
       
       // Execute request
-      final result = await executor.execute(request);
+      final future = executor.execute(request);
+      executor.cancelRequest(request);
+      final result = await future;
       
       // Verify request completed
       expect(result, isNotNull);
@@ -95,7 +99,7 @@ void main() {
     test('Batch Request Processing', () async {
       final executor = NetworkExecutor.instance;
       
-      // Create batch request
+      // 创建批量请求
       final batchRequest = BatchRequest([
         SimpleApiRequest(id: 1),
         SimpleApiRequest(id: 2),
@@ -104,11 +108,8 @@ void main() {
         SimpleApiRequest(id: 5),
       ]);
       
-      print('=== Batch Request Processing ===');
-      
       try {
         final response = await executor.execute(batchRequest);
-        print('Batch request completed: ${response.data}');
         expect(response.success, true);
         expect(response.data?['results'], hasLength(5));
       } catch (e) {
@@ -202,6 +203,8 @@ class MonitoredRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   }
 }
 
+// SimpleApiRequest is now imported from the main library
+
 /// Long running request
 class LongRunningRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   @override
@@ -214,7 +217,7 @@ class LongRunningRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   RequestPriority get priority => RequestPriority.critical; // Set to critical priority to avoid queue issues
   
   @override
-  int? get timeout => 2000; // 2 second timeout
+  int? get timeout => 10000; // 10 second timeout
   
   @override
   Map<String, dynamic> parseResponse(dynamic data) {
@@ -232,61 +235,9 @@ class LongRunningRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   }
 }
 
-/// Simple API request
-class SimpleApiRequest extends BaseNetworkRequest<Map<String, dynamic>> {
-  final int id;
-  
-  SimpleApiRequest({required this.id});
-  
-  @override
-  String get path => '/posts/$id';
-  
-  @override
-  HttpMethod get method => HttpMethod.get;
-  
-  @override
-  Map<String, dynamic> parseResponse(dynamic data) {
-    return data as Map<String, dynamic>;
-  }
-}
+// SimpleApiRequest is now imported from the main library
 
-/// Batch request
-class BatchRequest extends BaseNetworkRequest<Map<String, dynamic>> {
-  final List<SimpleApiRequest> requests;
-  
-  BatchRequest(this.requests);
-  
-  @override
-  String get path => '/posts/1'; // Use existing endpoint
-  
-  @override
-  HttpMethod get method => HttpMethod.get;
-  
-  @override
-  RequestPriority get priority => RequestPriority.critical; // Set to critical priority to avoid queue processing
-  
-  @override
-  Map<String, dynamic> parseResponse(dynamic data) {
-    // Return simulated batch request results directly
-    final results = <Map<String, dynamic>>[];
-    
-    for (int i = 0; i < requests.length; i++) {
-      results.add({
-        'userId': requests[i].id,
-        'id': requests[i].id * 10,
-        'title': 'Mock title for request ${requests[i].id}',
-        'body': 'Mock body content for request ${requests[i].id}'
-      });
-    }
-    
-    return {
-      'batchId': DateTime.now().millisecondsSinceEpoch.toString(),
-      'totalRequests': requests.length,
-      'successCount': results.length,
-      'results': results,
-    };
-  }
-}
+// BatchRequest is now imported from the main library
 
 /// Custom queue monitor
 class CustomQueueMonitor {

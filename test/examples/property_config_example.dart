@@ -2,38 +2,37 @@ import '../../lib/src/core/config/config_manager.dart';
 import '../../lib/src/core/config/environment.dart' as env;
 import '../../lib/src/core/config/environment_config.dart';
 
-/// 演示基于属性的配置管理功能 / Property-based Configuration Management Example
-/// Demonstrates how to manage configuration based on properties
+/// 演示基于属性的配置管理功能
 void main() async {
   final configManager = ConfigManager.instance;
   
-  print('=== 基于属性的配置管理示例 / Property-based Configuration Management Example ===\n');
+  print('=== 基于属性的配置管理示例 ===\n');
   
-  // 1. 使用预设配置 / Example 1: Use preset configuration
-  print('1. 当前开发环境配置 / Current development environment configuration:');
+  // 1. 使用预设配置
+  print('1. 当前开发环境配置:');
   final devConfig = configManager.currentConfig;
   if (devConfig != null) {
     print('   baseUrl: ${devConfig.baseUrl}');
-    print('   connectTimeout / 连接超时: ${devConfig.connectTimeout}ms');
-    print('   sendTimeout / 发送超时: ${devConfig.sendTimeout}ms');
-    print('   enableCache / 缓存启用: ${devConfig.enableCache}');
-    print('   cacheMaxAge / 缓存最大时间: ${devConfig.cacheMaxAge}s');
-    print('   enableExponentialBackoff / 指数退避启用: ${devConfig.enableExponentialBackoff}');
+    print('   连接超时: ${devConfig.connectTimeout}ms');
+    print('   发送超时: ${devConfig.sendTimeout}ms');
+    print('   缓存启用: ${devConfig.enableCache}');
+    print('   缓存最大时间: ${devConfig.cacheMaxAge}s');
+    print('   指数退避启用: ${devConfig.enableExponentialBackoff}');
   }
   
-  // 2. 单个属性更改 / Example 2: Modify single property
-  print('\n2. 修改单个属性 / Modify Single Property:');
-  print('   修改 sendTimeout 从 / Modify sendTimeout from ${configManager.getEnvironmentProperty<int>(env.Environment.development, "sendTimeout")} 到 / to 25000ms');
+  // 2. 单个属性更改
+  print('\n2. 修改单个属性:');
+  print('   修改 sendTimeout 从 ${configManager.getEnvironmentProperty<int>(env.Environment.development, "sendTimeout")} 到 25000ms');
   configManager.updateEnvironmentProperty(
     env.Environment.development, 
     'sendTimeout', 
     25000
   );
   
-  print('   修改后的 sendTimeout / Modified sendTimeout: ${configManager.getEnvironmentProperty<int>(env.Environment.development, "sendTimeout")}ms');
+  print('   修改后的 sendTimeout: ${configManager.getEnvironmentProperty<int>(env.Environment.development, "sendTimeout")}ms');
   
-  // 3. 批量属性更改 / Example 3: Batch modify properties
-  print('\n3. 批量修改属性 / Batch Modify Properties:');
+  // 3. 批量属性更改
+  print('\n3. 批量修改属性:');
   final currentConfig = configManager.currentConfig;
   if (currentConfig != null) {
     final updatedConfig = currentConfig.copyWith(
@@ -43,19 +42,19 @@ void main() async {
     );
     
     configManager.setEnvironmentConfigObject(env.Environment.development, updatedConfig);
-    print('   已批量更新 / Batch updated: connectTimeout=20000ms, receiveTimeout=35000ms, enableCache=false');
+    print('   已批量更新: connectTimeout=20000ms, receiveTimeout=35000ms, enableCache=false');
   }
   
-  // 4. 获取所有可配置属性 / Get all configurable properties
-  print('\n4. 所有可配置属性 / All Configurable Properties:');
+  // 4. 获取所有可配置属性
+  print('\n4. 所有可配置属性:');
   final propertyNames = EnvironmentConfigPresets.development.getAllPropertyNames();
   for (final name in propertyNames) {
     final value = configManager.getEnvironmentProperty(env.Environment.development, name);
     print('   $name: $value');
   }
   
-  // 5. 自定义配置 / Custom configuration
-  print('\n5. 创建自定义配置 / Create Custom Configuration:');
+  // 5. 自定义配置
+  print('\n5. 创建自定义配置:');
   final customConfig = EnvironmentConfig(
     baseUrl: 'https://custom-api.example.com',
     connectTimeout: 12000,
@@ -69,10 +68,10 @@ void main() async {
   );
   
   configManager.setEnvironmentConfigObject(env.Environment.staging, customConfig);
-  print('   已设置预发布环境的自定义配置 / Custom configuration set for staging environment');
+  print('   已设置预发布环境的自定义配置');
   
-  // 6. 配置验证 / Configuration validation
-  print('\n6. 配置验证示例 / Configuration Validation Example:');
+  // 6. 配置验证
+  print('\n6. 配置验证示例:');
   try {
     // 尝试设置无效的超时值
     configManager.updateEnvironmentProperty(
@@ -81,38 +80,38 @@ void main() async {
       -1000 // 无效值
     );
   } catch (e) {
-    print('   配置验证失败（预期）/ Configuration validation failed (expected): $e');
+    print('   配置验证失败（预期）: $e');
   }
   
-  // 7. 环境切换 / Environment switching
-  print('\n7. 环境切换 / Environment Switching:');
+  // 7. 环境切换
+  print('\n7. 环境切换:');
   print('   当前环境 / Current environment: ${configManager.currentEnvironment}');
   await configManager.switchEnvironment(env.Environment.production);
-  print('   切换到生产环境 / Switched to production environment');
+  print('   切换到生产环境');
   
   final prodConfig = configManager.currentConfig;
   if (prodConfig != null) {
-    print('   生产环境配置 / Production environment configuration:');
+    print('   生产环境配置:');
     print('     baseUrl: ${prodConfig.baseUrl}');
-    print('     enableLogging / 日志启用: ${prodConfig.enableLogging}');
-    print('     cacheMaxAge / 缓存最大时间: ${prodConfig.cacheMaxAge}s');
+    print('     enableLogging: ${prodConfig.enableLogging}');
+    print('     cacheMaxAge: ${prodConfig.cacheMaxAge}s');
   }
   
-  // 8. 配置监听 / Configuration listening
-  print('\n8. 配置变更监听 / Configuration Change Listening:');
+  // 8. 配置监听
+  print('\n8. 配置变更监听:');
   configManager.configChanges.listen((event) {
     switch (event.type) {
       case ConfigChangeType.propertyUpdated:
-        print('   属性更新 / Property updated: ${event.propertyName} = ${event.newValue}');
+        print('   属性更新: ${event.propertyName} = ${event.newValue}');
         break;
       case ConfigChangeType.environmentSwitched:
-        print('   环境切换 / Environment switched: ${event.oldEnvironment} -> ${event.environment}');
+        print('   环境切换: ${event.oldEnvironment} -> ${event.environment}');
         break;
       case ConfigChangeType.environmentConfigUpdated:
-        print('   环境配置更新 / Environment config updated: ${event.environment}');
+        print('   环境配置更新: ${event.environment}');
         break;
       default:
-        print('   配置变更 / Configuration changed: ${event.type}');
+        print('   配置变更: ${event.type}');
     }
   });
   
@@ -125,7 +124,7 @@ void main() async {
   
   await configManager.switchEnvironment(env.Environment.development);
   
-  print('\n=== 示例完成 / Example Completed ===');
+  print('\n=== 示例完成 ===');
 }
 
 /// 演示配置预设的使用 / Demonstrate the use of configuration presets

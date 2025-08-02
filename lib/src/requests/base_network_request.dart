@@ -122,17 +122,21 @@ abstract class BaseNetworkRequest<T> {
       }
     }
     
+    final finalUrl = (baseUrl.endsWith('/') || path.startsWith('/'))
+        ? '$baseUrl$path'
+        : '$baseUrl/$path';
+
     return RequestOptions(
-      path: path,
+      path: finalUrl,
       method: method.value,
       queryParameters: finalQueryParams,
       data: finalData,
       headers: {
         ...?headers,
       },
-      connectTimeout: Duration(milliseconds: timeout ?? config.connectTimeout),
+      connectTimeout: Duration(milliseconds: config.connectTimeout),
       receiveTimeout: Duration(milliseconds: timeout ?? config.receiveTimeout),
-      sendTimeout: Duration(milliseconds: timeout ?? config.sendTimeout),
+      sendTimeout: Duration(milliseconds: config.sendTimeout),
     );
   }
   

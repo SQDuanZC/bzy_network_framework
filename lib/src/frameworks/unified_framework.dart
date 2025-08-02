@@ -6,6 +6,7 @@ import '../model/network_response.dart';
 import '../config/network_config.dart';
 import '../utils/network_logger.dart';
 import '../core/exception/unified_exception_handler.dart';
+import '../core/interceptor/interceptor_manager.dart';
 
 /// Unified network framework - core entry point for plugin architecture
 class UnifiedNetworkFramework {
@@ -30,6 +31,7 @@ class UnifiedNetworkFramework {
   void _initializeExceptionHandling() {
     // Add exception interceptor to network executor
     _executor.addInterceptor(ExceptionInterceptor());
+    InterceptorManager.instance.registerInterceptor('retry', RetryInterceptor());
     
     // Register default global exception handler
     UnifiedExceptionHandler.instance.registerGlobalHandler(
@@ -146,7 +148,7 @@ class UnifiedNetworkFramework {
       
       // Apply plugin response post-processing
       for (final plugin in _plugins.values) {
-        await plugin.onRequestComplete(request, response);
+        await plugin.onRequestComplete(request, response.cast<dynamic>());
       }
       
       return response;
@@ -336,7 +338,7 @@ abstract class NetworkPlugin {
   Future<void> onRequestStart(BaseNetworkRequest request) async {}
   
   /// 请求完成时调用
-  Future<void> onRequestComplete(BaseNetworkRequest request, NetworkResponse response) async {}
+  Future<void> onRequestComplete(BaseNetworkRequest request, NetworkResponse<dynamic> response) async {}
   
   /// 请求错误时调用
   Future<void> onRequestError(BaseNetworkRequest request, dynamic error) async {}

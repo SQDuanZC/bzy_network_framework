@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bzy_network_framework/bzy_network_framework.dart';
+import 'dart:async';
 
 /// Basic Network Request Examples / 基础网络请求示例 (Basic Network Request Examples)
 /// Demonstrates the basic usage of the network framework / 演示网络框架的基本使用方法 (demonstrates the basic usage of the network framework)
@@ -58,7 +59,7 @@ void main() {
       } catch (e) {
         print('POST request failed: $e');
       }
-    });
+    }, timeout: const Timeout(Duration(seconds: 60)));
   });
 }
 

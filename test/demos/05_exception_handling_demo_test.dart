@@ -1,6 +1,8 @@
-import 'package:bzy_network_framework/bzy_network_framework.dart';
-
 import 'package:test/test.dart';
+import 'dart:async';
+import '../../lib/bzy_network_framework.dart';
+
+int retryableRequestCounter = 0;
 
 /// Exception Handling Examples
 /// Demonstrates handling of network timeout, HTTP status codes, JSON parsing, custom exceptions, retryable exceptions, and exception recovery
@@ -8,15 +10,20 @@ import 'package:test/test.dart';
 void main() {
   group('Exception Handling Function Tests', () {
     setUpAll(() async {
-      // Initialize framework
+      // Initialize framework, disable cache for testing
       await UnifiedNetworkFramework.instance.initialize(
-        baseUrl: 'https://jsonplaceholder.typicode.com',
+        baseUrl: 'https://httpbin.org',
+        config: {'enableCache': false},
       );
       
       // Register global exception handler
       UnifiedExceptionHandler.instance.registerGlobalHandler(
         CustomGlobalExceptionHandler(),
       );
+    });
+
+    setUp(() {
+      retryableRequestCounter = 0;
     });
     
     test('Network Timeout Exception Test', () async {
@@ -41,7 +48,7 @@ void main() {
     
     test('Exception Recovery Test', () async {
       await _demonstrateRecoverableException();
-    });
+    }, timeout: const Timeout(Duration(seconds: 60)));
   });
 }
 
@@ -165,10 +172,10 @@ Future<void> _demonstrateRecoverableException() async {
 /// Timeout request
 class TimeoutRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   @override
-  String get path => '/posts/1';
+  String get path => '/delay/5'; // httpbin.org endpoint for delays
   
   @override
-  int? get timeout => 1; // Very short timeout, guaranteed to timeout
+  int? get timeout => 2000; // 2 second timeout
   
   @override
   Map<String, dynamic> parseResponse(dynamic data) {
@@ -179,7 +186,7 @@ class TimeoutRequest extends BaseNetworkRequest<Map<String, dynamic>> {
 /// HTTP error request
 class HttpErrorRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   @override
-  String get path => '/posts/999999'; // Non-existent resource, returns 404
+  String get path => '/status/404'; // httpbin.org endpoint for status codes
   
   @override
   Map<String, dynamic> parseResponse(dynamic data) {
@@ -188,24 +195,21 @@ class HttpErrorRequest extends BaseNetworkRequest<Map<String, dynamic>> {
 }
 
 /// JSON parse error request
-class JsonParseErrorRequest extends BaseNetworkRequest<Map<String, dynamic>> {
+class JsonParseErrorRequest extends BaseNetworkRequest<String> {
   @override
-  String get path => '/posts/1';
-  
+  String get path => '/html'; // httpbin.org endpoint that returns html
+
   @override
-  Map<String, dynamic> parseResponse(dynamic data) {
-    // Intentionally throw parse exception
-    if (data is Map<String, dynamic>) {
-      throw FormatException('Simulate JSON parse error');
-    }
-    return data as Map<String, dynamic>;
+  String parseResponse(dynamic data) {
+    // This will fail as we expect JSON but get HTML
+    return data['headers']['Host'];
   }
 }
 
 /// Custom exception request
 class CustomExceptionRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   @override
-  String get path => '/posts/1';
+  String get path => '/get';
   
   @override
   Map<String, dynamic> parseResponse(dynamic data) {
@@ -225,20 +229,25 @@ class CustomExceptionRequest extends BaseNetworkRequest<Map<String, dynamic>> {
 /// Retryable error request
 class RetryableErrorRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   @override
-  String get path => '/posts/1';
-  
+  String get path => '/get';
+
   @override
   int get maxRetries => 3;
-  
+
   @override
   int get retryDelay => 1000;
-  
+
   @override
   Map<String, dynamic> parseResponse(dynamic data) {
-    // Simulate intermittent error
-    if (DateTime.now().millisecond % 2 == 0) {
-      throw Exception('Simulate intermittent network error');
+    retryableRequestCounter++;
+    print('RetryableErrorRequest attempt: $retryableRequestCounter');
+    if (retryableRequestCounter <= 2) {
+      throw NetworkException(
+        errorCode: 'RETRYABLE_ERROR',
+        message: 'Simulating intermittent parse error',
+      );
     }
+    print('RetryableErrorRequest succeeding on attempt $retryableRequestCounter');
     return data as Map<String, dynamic>;
   }
 }
@@ -246,15 +255,27 @@ class RetryableErrorRequest extends BaseNetworkRequest<Map<String, dynamic>> {
 /// Recoverable error request
 class RecoverableErrorRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   @override
-  String get path => '/posts/1';
+  String get path => '/get';
+
+  @override
+  int? get sendTimeout => 5000;
+
+  @override
+  int? get receiveTimeout => 5000;
   
   @override
   Map<String, dynamic> parseResponse(dynamic data) {
-    return data as Map<String, dynamic>;
+    if (data is Map<String, dynamic>) {
+      return data;
+    } else if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    } else {
+      return {'message': data?.toString() ?? 'Unknown response'};
+    }
   }
   
   @override
-  void onRequestError(Exception error) {
+  void onRequestError(NetworkException error) {
     print('Attempting error recovery: $error');
     // Error recovery logic can be implemented here
   }

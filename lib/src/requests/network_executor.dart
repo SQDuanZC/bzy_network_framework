@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:meta/meta.dart';
+import 'package:meta/meta.dart' show unawaited;
+import 'package:synchronized/synchronized.dart';
 import 'base_network_request.dart';
 import '../model/network_response.dart';
 import '../config/network_config.dart';
 import '../core/exception/unified_exception_handler.dart';
+import '../core/interceptor/interceptor_manager.dart';
+import 'batch_request.dart';
+
 
 /// Network request executor - unified network request entry point
 class NetworkExecutor {
@@ -13,7 +17,7 @@ class NetworkExecutor {
   late Dio _dio;
   final Map<String, dynamic> _cache = {};
   final Map<String, Completer<NetworkResponse<dynamic>>> _pendingRequests = {};
-  final Map<RequestPriority, List<BaseNetworkRequest>> _requestQueues = {
+  final Map<RequestPriority, List<BaseNetworkRequest<dynamic>>> _requestQueues = {
     RequestPriority.critical: [],
     RequestPriority.high: [],
     RequestPriority.normal: [],
@@ -21,6 +25,15 @@ class NetworkExecutor {
   };
   final Map<String, Timer> _cacheTimers = {};
   bool _isProcessingQueue = false;
+  
+  // 并发安全锁
+  final Lock _pendingRequestsLock = Lock();
+  final Lock _queueLock = Lock();
+  final Lock _cacheLock = Lock();
+  final Lock _processingLock = Lock();
+  
+  // 批量请求标记，避免重复处理
+  final Set<String> _batchRequestIds = {};
   
   /// Singleton instance
   static NetworkExecutor get instance {
@@ -64,6 +77,11 @@ class NetworkExecutor {
   
   /// Execute network request
   Future<NetworkResponse<T>> execute<T>(BaseNetworkRequest<T> request) async {
+    if (request is BatchRequest) {
+      final result = await _executeBatchRequest(request as BatchRequest) as NetworkResponse<T>;
+      return result;
+    }
+    
     // Check cache
     if (request.enableCache) {
       final cachedResponse = await _getCachedResponse<T>(request);
@@ -73,11 +91,20 @@ class NetworkExecutor {
       }
     }
     
-    // Check if same request is in progress
+    // Check if same request is in progress (with lock protection)
     final requestKey = _getRequestKey(request);
-    if (_pendingRequests.containsKey(requestKey)) {
-      final result = await _pendingRequests[requestKey]!.future;
-      return result as NetworkResponse<T>;
+    final existingCompleter = await _pendingRequestsLock.synchronized(() {
+      return _pendingRequests[requestKey];
+    });
+    
+    if (existingCompleter != null) {
+      try {
+        final result = await existingCompleter.future;
+        return result.cast<T>();
+      } catch (e) {
+        // If the pending request fails, re-throw the exception
+        rethrow;
+      }
     }
     
     // Handle request based on priority
@@ -89,10 +116,16 @@ class NetworkExecutor {
   }
   
   /// Execute specific network request
-  Future<NetworkResponse<T>> _executeRequest<T>(BaseNetworkRequest<T> request) async {
+  Future<NetworkResponse<T>> _executeRequest<T>(BaseNetworkRequest<T> request, {bool isBatch = false}) async {
     final requestKey = _getRequestKey(request);
-    final completer = Completer<NetworkResponse<T>>();
-    _pendingRequests[requestKey] = completer;
+    final completer = Completer<NetworkResponse<dynamic>>();
+    
+    // 原子操作：添加到待处理请求映射
+    if (!isBatch) {
+      await _pendingRequestsLock.synchronized(() {
+        _pendingRequests[requestKey] = completer;
+      });
+    }
     
     try {
       request.onRequestStart();
@@ -110,27 +143,30 @@ class NetworkExecutor {
       
       // Check if it's a download request
       if (request is DownloadRequest) {
-        return await _executeDownloadRequest<T>(request as DownloadRequest<T>);
+        final result = await _executeDownloadRequest<T>(request as DownloadRequest<T>);
+        
+        // 清理资源
+        if (!isBatch) {
+          await _pendingRequestsLock.synchronized(() {
+            _pendingRequests.remove(requestKey);
+          });
+        }
+        
+        // Remove custom interceptors
+        if (request.customInterceptors != null) {
+          for (final interceptor in request.customInterceptors!) {
+            _dio.interceptors.remove(interceptor);
+          }
+        }
+        
+        return result;
       }
       
-      // Execute normal request
-      final response = await _dio.request(
-        options.path,
-        options: Options(
-          method: options.method,
-          headers: options.headers,
-          sendTimeout: options.sendTimeout,
-          receiveTimeout: options.receiveTimeout,
-        ),
-        queryParameters: options.queryParameters,
-        data: options.data,
-      );
+      // Directly execute the request without interceptor chain to avoid infinite recursion
+      final response = await _dio.fetch<dynamic>(options);
       
       final duration = DateTime.now().difference(startTime).inMilliseconds;
-      
-      // Parse response
       final parsedData = request.parseResponse(response.data);
-      
       final networkResponse = NetworkResponse<T>.success(
         data: parsedData,
         statusCode: response.statusCode ?? 200,
@@ -139,55 +175,18 @@ class NetworkExecutor {
         duration: duration,
       );
       
-      // Cache response
       if (request.enableCache) {
-        await _cacheResponse(request, networkResponse);
+        _cacheResponse(request, networkResponse);
       }
       
       request.onRequestComplete(networkResponse);
-      completer.complete(networkResponse);
       
-      return networkResponse;
-      
-    } catch (error) {
-      // Use unified exception handling system
-      final unifiedException = await UnifiedExceptionHandler.instance.handleException(
-        error,
-        context: 'Network request execution',
-        metadata: {
-          'path': request.path,
-          'method': request.method.value,
-          'enableCache': request.enableCache,
-        },
-      );
-      
-      // Try to use request's custom error handling
-      NetworkException? customException;
-      if (error is DioException) {
-        customException = request.handleError(error);
+      // 清理资源
+      if (!isBatch) {
+        await _pendingRequestsLock.synchronized(() {
+          _pendingRequests.remove(requestKey);
+        });
       }
-      
-      final errorResponse = NetworkResponse<T>.error(
-        message: customException?.message ?? unifiedException.message,
-        statusCode: customException?.statusCode ?? unifiedException.statusCode,
-        errorCode: customException?.errorCode ?? unifiedException.code.name,
-      );
-      
-      // Create compatible NetworkException for callback
-      final networkException = NetworkException(
-        message: unifiedException.message,
-        statusCode: unifiedException.statusCode,
-        errorCode: unifiedException.code.name,
-        originalError: unifiedException.originalError,
-      );
-      
-      request.onRequestError(networkException);
-      completer.complete(errorResponse);
-      
-      return errorResponse;
-      
-    } finally {
-      _pendingRequests.remove(requestKey);
       
       // Remove custom interceptors
       if (request.customInterceptors != null) {
@@ -195,29 +194,115 @@ class NetworkExecutor {
           _dio.interceptors.remove(interceptor);
         }
       }
+      
+      return networkResponse.cast<T>();
+      
+      final result = await completer.future.then((value) => value.cast<T>());
+      
+      // 原子操作：从待处理请求映射中移除
+      if (!isBatch) {
+        await _pendingRequestsLock.synchronized(() {
+          _pendingRequests.remove(requestKey);
+        });
+      }
+      
+      // Remove custom interceptors
+      if (request.customInterceptors != null) {
+        for (final interceptor in request.customInterceptors!) {
+          _dio.interceptors.remove(interceptor);
+        }
+      }
+      
+      return result;
+    } catch (e) {
+      // 确保在异常情况下也清理资源
+      if (!isBatch) {
+        await _pendingRequestsLock.synchronized(() {
+          _pendingRequests.remove(requestKey);
+        });
+      }
+      
+      // Remove custom interceptors
+      if (request.customInterceptors != null) {
+        for (final interceptor in request.customInterceptors!) {
+          _dio.interceptors.remove(interceptor);
+        }
+      }
+      
+      rethrow;
     }
+  }
+
+  void _handleError<T>(
+    dynamic error,
+    BaseNetworkRequest<T> request,
+    Completer<NetworkResponse<dynamic>> completer,
+  ) {
+    print('🔍 [DEBUG] _handleError called with error: $error');
+    final dioError = error is DioException
+        ? error
+        : DioException(requestOptions: request.buildRequestOptions(), error: error);
+
+    final networkException = UnifiedExceptionHandler.instance.createNetworkException(dioError);
+
+    final customException = request.handleError(dioError);
+    final finalException = customException ?? networkException;
+
+    unawaited(UnifiedExceptionHandler.instance.handleException(
+      dioError,
+      context: 'Network request execution',
+      metadata: {
+        'path': request.path,
+        'method': request.method.value,
+        'enableCache': request.enableCache,
+      },
+    ));
+
+    request.onRequestError(finalException as NetworkException);
+    print('🔍 [DEBUG] Completing completer with error');
+    completer.completeError(finalException);
   }
   
   /// Enqueue request based on priority
   Future<NetworkResponse<T>> _enqueueRequest<T>(BaseNetworkRequest<T> request) async {
-    final completer = Completer<NetworkResponse<T>>();
+    final completer = Completer<NetworkResponse<dynamic>>();
     final requestKey = _getRequestKey(request);
     
-    // Add request to appropriate priority queue
-    _requestQueues[request.priority]!.add(request);
-    _pendingRequests[requestKey] = completer;
+    print('🔍 [DEBUG] _enqueueRequest called for ${request.runtimeType} with key: $requestKey');
+    
+    // 原子操作：添加到队列和待处理请求映射
+    await _queueLock.synchronized(() {
+      _requestQueues[request.priority]!.add(request);
+      print('🔍 [DEBUG] Added to queue ${request.priority}, queue size: ${_requestQueues[request.priority]!.length}');
+    });
+    
+    await _pendingRequestsLock.synchronized(() {
+      _pendingRequests[requestKey] = completer;
+      print('🔍 [DEBUG] Added to _pendingRequests, total pending: ${_pendingRequests.length}');
+    });
     
     // Start processing queue if not already processing
-    if (!_isProcessingQueue) {
-      unawaited(_processRequestQueue());
-    }
+    await _processingLock.synchronized(() {
+      if (!_isProcessingQueue) {
+        print('🔍 [DEBUG] Starting queue processing');
+        unawaited(_processRequestQueue());
+      } else {
+        print('🔍 [DEBUG] Queue processing already in progress');
+      }
+    });
     
-    return await completer.future;
+    print('🔍 [DEBUG] Waiting for enqueued request completer...');
+    return (await completer.future).cast<T>();
   }
   
   /// Process request queue
   Future<void> _processRequestQueue() async {
-    if (_isProcessingQueue) return;
+    print('🔍 [DEBUG] _processRequestQueue called, _isProcessingQueue: $_isProcessingQueue');
+    // 避免重复处理
+    if (_isProcessingQueue) {
+      print('🔍 [DEBUG] Queue processing already in progress, returning');
+      return;
+    }
     
     _isProcessingQueue = true;
     
@@ -226,26 +311,38 @@ class NetworkExecutor {
       while (_hasQueuedRequests()) {
         // Process requests by priority (critical -> high -> normal -> low)
         for (final priority in RequestPriority.values.reversed) {
-          final queue = _requestQueues[priority]!;
+          // 原子操作：从队列中取出请求
+          BaseNetworkRequest<dynamic>? request;
+          await _queueLock.synchronized(() {
+            final queue = _requestQueues[priority]!;
+            if (queue.isNotEmpty) {
+              request = queue.removeAt(0);
+            }
+          });
           
-          if (queue.isNotEmpty) {
-            final request = queue.removeAt(0);
-            final requestKey = _getRequestKey(request);
+          if (request != null) {
+            final requestKey = _getRequestKey(request!);
             
             try {
-              final result = await _executeRequest(request);
+              final result = await _executeRequest(request!);
               
-              // Complete the pending request
-              if (_pendingRequests.containsKey(requestKey)) {
-                _pendingRequests[requestKey]!.complete(result);
-                _pendingRequests.remove(requestKey);
-              }
+              // 原子操作：完成待处理请求
+              await _pendingRequestsLock.synchronized(() {
+                if (_pendingRequests.containsKey(requestKey)) {
+                  final completer = _pendingRequests[requestKey]! as Completer<NetworkResponse<dynamic>>;
+                  completer.complete(result.cast<dynamic>());
+                  _pendingRequests.remove(requestKey);
+                }
+              });
             } catch (error) {
-              // Complete with error
-              if (_pendingRequests.containsKey(requestKey)) {
-                _pendingRequests[requestKey]!.completeError(error);
-                _pendingRequests.remove(requestKey);
-              }
+              // 原子操作：完成错误请求
+              await _pendingRequestsLock.synchronized(() {
+                if (_pendingRequests.containsKey(requestKey)) {
+                  final completer = _pendingRequests[requestKey]! as Completer<NetworkResponse<dynamic>>;
+                  completer.completeError(error);
+                  _pendingRequests.remove(requestKey);
+                }
+              });
             }
             
             // Add small delay to avoid too frequent requests
@@ -269,6 +366,69 @@ class NetworkExecutor {
   /// Check if there are any queued requests
   bool _hasQueuedRequests() {
     return _requestQueues.values.any((queue) => queue.isNotEmpty);
+  }
+
+  Future<NetworkResponse<Map<String, dynamic>>> _executeBatchRequest(BatchRequest batchRequest) async {
+    final batchId = 'batch_${DateTime.now().millisecondsSinceEpoch}_${batchRequest.hashCode}';
+    
+    // 检查批量请求是否已经在处理中
+    final isAlreadyProcessing = await _pendingRequestsLock.synchronized(() {
+      if (_batchRequestIds.contains(batchId)) {
+        return true;
+      }
+      _batchRequestIds.add(batchId);
+      return false;
+    });
+    
+    if (isAlreadyProcessing) {
+      return NetworkResponse.error(
+        statusCode: 409,
+        message: 'Batch request already in progress',
+        errorCode: 'BATCH_DUPLICATE',
+      );
+    }
+    
+    try {
+      // 为批量请求的子请求添加特殊标记
+      final futures = batchRequest.requests.map((req) {
+        // 为子请求添加批量标记，避免重复处理
+        return _executeRequest(req, isBatch: true);
+      }).toList();
+
+      final responses = await Future.wait(futures);
+      
+      final results = responses.map((res) => res.data).toList();
+      final combinedData = {
+        'results': results,
+        'successCount': responses.where((res) => res.success).length,
+        'totalCount': responses.length,
+        'batchId': batchId,
+      };
+
+      // 使用BatchRequest的parseResponse方法处理数据
+      final parsedData = batchRequest.parseResponse(combinedData);
+      
+      final response = NetworkResponse.success(
+        data: parsedData,
+        statusCode: 200,
+        message: 'Batch request successful',
+      );
+      batchRequest.onRequestComplete(response);
+      return response;
+    } catch (e) {
+      final exception = e is NetworkException ? e : NetworkException(message: e.toString());
+      batchRequest.onRequestError(exception);
+      return NetworkResponse.error(
+        statusCode: 500,
+        message: 'Batch request failed: ${exception.message}',
+        errorCode: exception.errorCode,
+      );
+    } finally {
+      // 清理批量请求标记
+      await _pendingRequestsLock.synchronized(() {
+        _batchRequestIds.remove(batchId);
+      });
+    }
   }
   
   /// Execute batch requests
@@ -300,7 +460,7 @@ class NetworkExecutor {
     // Remove from pending requests
     final completer = _pendingRequests.remove(requestKey);
     if (completer != null && !completer.isCompleted) {
-      completer.complete(NetworkResponse.error(
+      completer.complete(NetworkResponse<dynamic>.error(
         message: 'Request cancelled',
         statusCode: -999,
         errorCode: 'CANCELLED',
@@ -314,59 +474,79 @@ class NetworkExecutor {
   }
   
   /// Cancel all requests
-  void cancelAllRequests() {
-    // Cancel all pending requests
-    for (final completer in _pendingRequests.values) {
-      if (!completer.isCompleted) {
-        completer.complete(NetworkResponse.error(
-          message: 'All requests cancelled',
-          statusCode: -999,
-          errorCode: 'ALL_CANCELLED',
-        ));
+  Future<void> cancelAllRequests() async {
+    // 原子操作：取消所有待处理请求
+    await _pendingRequestsLock.synchronized(() {
+      for (final completer in _pendingRequests.values) {
+        if (!completer.isCompleted) {
+          completer.complete(NetworkResponse<dynamic>.error(
+            message: 'All requests cancelled',
+            statusCode: -999,
+            errorCode: 'ALL_CANCELLED',
+          ));
+        }
       }
-    }
-    _pendingRequests.clear();
+      _pendingRequests.clear();
+    });
     
-    // Clear all queues
-    for (final queue in _requestQueues.values) {
-      queue.clear();
-    }
+    // 原子操作：清空所有队列
+    await _queueLock.synchronized(() {
+      for (final queue in _requestQueues.values) {
+        queue.clear();
+      }
+    });
+    
+    // 清理批量请求标记
+    await _pendingRequestsLock.synchronized(() {
+      _batchRequestIds.clear();
+    });
   }
   
   /// Get cached response
   Future<NetworkResponse<T>?> _getCachedResponse<T>(BaseNetworkRequest<T> request) async {
     final cacheKey = request.getCacheKey();
-    final cachedData = _cache[cacheKey];
     
-    if (cachedData != null) {
-      try {
-        final parsedData = request.parseResponse(cachedData);
-        return NetworkResponse<T>.fromCache(
-          data: parsedData,
-          message: 'From Cache',
-        );
-      } catch (e) {
-        // Cache data parsing failed, remove cache
-        _cache.remove(cacheKey);
+    return await _cacheLock.synchronized(() {
+      final cachedData = _cache[cacheKey];
+      
+      if (cachedData != null) {
+        try {
+          final parsedData = request.parseResponse(cachedData);
+          return NetworkResponse<T>.fromCache(
+            data: parsedData,
+            message: 'From Cache',
+          );
+        } catch (e) {
+          // Cache data parsing failed, remove cache
+          _cache.remove(cacheKey);
+          _cacheTimers[cacheKey]?.cancel();
+          _cacheTimers.remove(cacheKey);
+        }
       }
-    }
-    
-    return null;
+      
+      return null;
+    });
   }
   
   /// Cache response
   Future<void> _cacheResponse<T>(BaseNetworkRequest<T> request, NetworkResponse<T> response) async {
     if (response.success && response.data != null) {
       final cacheKey = request.getCacheKey();
-      _cache[cacheKey] = response.data;
       
-      // Cancel previous timer
-      _cacheTimers[cacheKey]?.cancel();
-      
-      // Set new expiration timer
-      _cacheTimers[cacheKey] = Timer(Duration(seconds: request.cacheDuration), () {
-        _cache.remove(cacheKey);
-        _cacheTimers.remove(cacheKey);
+      await _cacheLock.synchronized(() {
+        _cache[cacheKey] = response.data;
+        
+        // Cancel previous timer
+        _cacheTimers[cacheKey]?.cancel();
+        
+        // Set new expiration timer
+        _cacheTimers[cacheKey] = Timer(Duration(seconds: request.cacheDuration), () {
+          // 缓存过期时也需要原子操作
+          _cacheLock.synchronized(() {
+            _cache.remove(cacheKey);
+            _cacheTimers.remove(cacheKey);
+          });
+        });
       });
     }
   }
@@ -470,7 +650,7 @@ class NetworkExecutor {
   /// Execute file download request
   Future<NetworkResponse<T>> _executeDownloadRequest<T>(DownloadRequest<T> request) async {
     final requestKey = _getRequestKey(request);
-    final completer = Completer<NetworkResponse<T>>();
+    final completer = Completer<NetworkResponse<dynamic>>();
     _pendingRequests[requestKey] = completer;
     
     try {
@@ -503,13 +683,14 @@ class NetworkExecutor {
       final response = await _dio.download(
         options.path,
         request.savePath,
+        data: options.data,
+        queryParameters: options.queryParameters,
         options: Options(
           method: options.method,
           headers: options.headers,
           sendTimeout: options.sendTimeout,
           receiveTimeout: options.receiveTimeout,
         ),
-        queryParameters: options.queryParameters,
         onReceiveProgress: (received, total) {
           if (request.onProgress != null && total != -1) {
             request.onProgress!(received, total);
@@ -549,7 +730,17 @@ class NetworkExecutor {
       
     } catch (error) {
       // Use unified exception handling system
-      final unifiedException = await UnifiedExceptionHandler.instance.handleException(
+      final networkException = UnifiedExceptionHandler.instance.createNetworkException(error);
+
+      // Try to use request's custom error handling
+      NetworkException? customException;
+      if (error is DioException) {
+        customException = request.handleError(error);
+      }
+      final finalException = customException ?? networkException;
+
+      // Asynchronously report the exception without blocking the flow
+      unawaited(UnifiedExceptionHandler.instance.handleException(
         error,
         context: 'File download request',
         metadata: {
@@ -557,32 +748,18 @@ class NetworkExecutor {
           'savePath': request.savePath,
           'overwriteExisting': request.overwriteExisting,
         },
-      );
-      
-      // Try to use request's custom error handling
-      NetworkException? customException;
-      if (error is DioException) {
-        customException = request.handleError(error);
-      }
-      
+      ));
+
       final errorResponse = NetworkResponse<T>.error(
-        message: customException?.message ?? unifiedException.message,
-        statusCode: customException?.statusCode ?? unifiedException.statusCode,
-        errorCode: customException?.errorCode ?? unifiedException.code.name,
+        message: (finalException as NetworkException).message,
+        statusCode: (finalException as NetworkException).statusCode ?? -1,
+        errorCode: (finalException as NetworkException).errorCode,
       );
       
-      // Create compatible NetworkException for callback
-      final networkException = NetworkException(
-        message: unifiedException.message,
-        statusCode: unifiedException.statusCode,
-        errorCode: unifiedException.code.name,
-        originalError: unifiedException.originalError,
-      );
-      
-      request.onDownloadError?.call(networkException.message);
-      request.onRequestError(networkException);
+      request.onDownloadError?.call((finalException as NetworkException).message);
+      request.onRequestError(finalException as NetworkException);
       completer.complete(errorResponse);
-      
+
       return errorResponse;
       
     } finally {

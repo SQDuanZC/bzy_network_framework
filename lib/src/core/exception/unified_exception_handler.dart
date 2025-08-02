@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../utils/network_logger.dart';
+import 'network_exception.dart';
 
 /// Unified exception handling system
 /// Provides unified exception classification, error code definition and exception handling mechanism
@@ -32,26 +33,39 @@ class UnifiedExceptionHandler {
     _globalHandlers.remove(handler);
   }
   
+  /// Create NetworkException from various error types
+  NetworkException createNetworkException(dynamic error) {
+    final unifiedException = _createUnifiedException(error);
+    return NetworkException(
+      message: unifiedException.message,
+      statusCode: unifiedException.statusCode,
+      errorCode: unifiedException.code.name,
+      originalError: unifiedException.originalError,
+    );
+  }
+
+  UnifiedException _createUnifiedException(dynamic error) {
+    if (error is UnifiedException) {
+      return error;
+    } else if (error is DioException) {
+      return _handleDioException(error);
+    } else if (error is SocketException) {
+      return _handleSocketException(error);
+    } else if (error is TimeoutException) {
+      return _handleTimeoutException(error);
+    } else if (error is FormatException) {
+      return _handleFormatException(error);
+    } else {
+      return _handleGenericException(error);
+    }
+  }
+
   /// Handle exception
   Future<UnifiedException> handleException(dynamic error, {
     String? context,
     Map<String, dynamic>? metadata,
   }) async {
-    UnifiedException unifiedException;
-    
-    if (error is UnifiedException) {
-      unifiedException = error;
-    } else if (error is DioException) {
-      unifiedException = _handleDioException(error);
-    } else if (error is SocketException) {
-      unifiedException = _handleSocketException(error);
-    } else if (error is TimeoutException) {
-      unifiedException = _handleTimeoutException(error);
-    } else if (error is FormatException) {
-      unifiedException = _handleFormatException(error);
-    } else {
-      unifiedException = _handleGenericException(error);
-    }
+    var unifiedException = _createUnifiedException(error);
     
     // Add context information
     if (context != null) {
