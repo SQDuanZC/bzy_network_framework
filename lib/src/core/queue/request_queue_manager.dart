@@ -116,18 +116,37 @@ class RequestQueueManager {
         }
         
         // 创建新的重复请求列表
-        _duplicateRequests[duplicateKey] = [queuedRequest];
+      _duplicateRequests[duplicateKey] = [queuedRequest];
+    }
+    
+    // 检查队列大小限制
+    final totalQueueSize = _getTotalQueueSize();
+    if (totalQueueSize >= _config.maxQueueSize) {
+      // 队列已满，根据溢出策略处理
+      final handled = _handleQueueOverflow(queuedRequest);
+      if (!handled) {
+        // 拒绝新请求
+        queuedRequest.completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: ''),
+            message: '队列已满，请求被拒绝 (当前队列大小: $totalQueueSize, 最大: ${_config.maxQueueSize})',
+            type: DioExceptionType.cancel,
+          ),
+        );
+        _statistics.rejectedRequests++;
+        return completer.future;
       }
-      
-      // 添加到对应优先级队列
-      _queues[priority]!.add(queuedRequest);
-      _statistics.totalEnqueued++;
-      _statistics.queueSizes[priority] = (_statistics.queueSizes[priority] ?? 0) + 1;
-      
-      // 请求已入队: $effectiveRequestId (优先级: $priority)
-      
-      // 立即尝试处理队列
-      _processQueue();
+    }
+    
+    // 添加到对应优先级队列
+    _queues[priority]!.add(queuedRequest);
+    _statistics.totalEnqueued++;
+    _statistics.queueSizes[priority] = (_statistics.queueSizes[priority] ?? 0) + 1;
+    
+    // 请求已入队: $effectiveRequestId (优先级: $priority)
+    
+    // 立即尝试处理队列
+    _processQueue();
       
       return completer.future;
     });
@@ -712,6 +731,72 @@ class RequestQueueManager {
     };
   }
   
+  /// 获取总队列大小
+  int _getTotalQueueSize() {
+    return _queues.values.fold(0, (sum, queue) => sum + queue.length);
+  }
+  
+  /// 处理队列溢出
+  bool _handleQueueOverflow(QueuedRequest queuedRequest) {
+    switch (_config.overflowStrategy) {
+      case QueueOverflowStrategy.rejectNew:
+        return false; // 拒绝新请求
+        
+      case QueueOverflowStrategy.dropOldest:
+        return _dropOldestRequest();
+        
+      case QueueOverflowStrategy.dropOldestSamePriority:
+        return _dropOldestSamePriorityRequest(queuedRequest.priority);
+    }
+  }
+  
+  /// 丢弃最旧的低优先级请求
+  bool _dropOldestRequest() {
+    // 按优先级从低到高查找最旧的请求
+    for (final priority in [RequestPriority.low, RequestPriority.normal, RequestPriority.high, RequestPriority.critical]) {
+      final queue = _queues[priority]!;
+      if (queue.isNotEmpty) {
+        final droppedRequest = queue.removeFirst();
+        _statistics.queueSizes[priority] = (_statistics.queueSizes[priority] ?? 0) - 1;
+        
+        // 通知被丢弃的请求
+        droppedRequest.completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: ''),
+            message: '请求因队列溢出被丢弃',
+            type: DioExceptionType.cancel,
+          ),
+        );
+        
+        _statistics.cancelledRequests++;
+        return true; // 成功腾出空间
+      }
+    }
+    return false; // 没有可丢弃的请求
+  }
+  
+  /// 丢弃最旧的同优先级请求
+  bool _dropOldestSamePriorityRequest(RequestPriority priority) {
+    final queue = _queues[priority]!;
+    if (queue.isNotEmpty) {
+      final droppedRequest = queue.removeFirst();
+      _statistics.queueSizes[priority] = (_statistics.queueSizes[priority] ?? 0) - 1;
+      
+      // 通知被丢弃的请求
+      droppedRequest.completer.completeError(
+        DioException(
+          requestOptions: RequestOptions(path: ''),
+          message: '请求因队列溢出被丢弃（同优先级）',
+          type: DioExceptionType.cancel,
+        ),
+      );
+      
+      _statistics.cancelledRequests++;
+      return true; // 成功腾出空间
+    }
+    return false; // 没有可丢弃的同优先级请求
+  }
+  
   /// 更新配置
   void updateConfig(QueueConfig config) {
     _config = config;
@@ -774,10 +859,23 @@ enum RequestPriority {
   low,
 }
 
+/// 队列溢出策略
+enum QueueOverflowStrategy {
+  /// 拒绝新请求
+  rejectNew,
+  /// 丢弃最旧的低优先级请求
+  dropOldest,
+  /// 丢弃最旧的同优先级请求
+  dropOldestSamePriority,
+}
+
 /// 队列配置
 class QueueConfig {
   /// 最大并发请求数
   final int maxConcurrentRequests;
+  
+  /// 最大队列大小（总队列大小限制）
+  final int maxQueueSize;
   
   /// 最大队列时间
   final Duration maxQueueTime;
@@ -800,8 +898,12 @@ class QueueConfig {
   /// 重试最大延迟
   final Duration retryMaxDelay;
   
+  /// 队列溢出策略
+  final QueueOverflowStrategy overflowStrategy;
+  
   const QueueConfig({
     this.maxConcurrentRequests = 6,
+    this.maxQueueSize = 100,
     this.maxQueueTime = const Duration(minutes: 5),
     this.defaultTimeout = const Duration(seconds: 30),
     this.processingInterval = const Duration(milliseconds: 100),
@@ -809,6 +911,7 @@ class QueueConfig {
     this.maxRetryCount = 3,
     this.retryBaseDelay = const Duration(seconds: 1),
     this.retryMaxDelay = const Duration(seconds: 30),
+    this.overflowStrategy = QueueOverflowStrategy.rejectNew,
   });
 }
 
@@ -823,6 +926,7 @@ class QueueStatistics {
   int expiredRequests = 0;
   int retryRequests = 0;
   int duplicateRequests = 0;
+  int rejectedRequests = 0;
   
   final Map<RequestPriority, int> queueSizes = {
     RequestPriority.critical: 0,
@@ -863,6 +967,7 @@ class QueueStatistics {
     expiredRequests = 0;
     retryRequests = 0;
     duplicateRequests = 0;
+    rejectedRequests = 0;
     
     queueSizes.updateAll((key, value) => 0);
     
@@ -882,6 +987,7 @@ class QueueStatistics {
       'expiredRequests': expiredRequests,
       'retryRequests': retryRequests,
       'duplicateRequests': duplicateRequests,
+      'rejectedRequests': rejectedRequests,
       'queueSizes': queueSizes.map((key, value) => MapEntry(key.name, value)),
       'averageExecutionTime': averageExecutionTime.inMilliseconds,
       'successRate': successRate,
