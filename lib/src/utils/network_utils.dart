@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import '../core/exception/unified_exception_handler.dart';
+import '../core/network/network_connectivity_monitor.dart';
+import '../core/network/network_adapter.dart';
 import '../requests/base_network_request.dart';
 
 /// Network utility class
@@ -17,6 +19,54 @@ class NetworkUtils {
     } on SocketException catch (_) {
       return false;
     }
+  }
+  
+  /// Get current network status
+  static NetworkStatus getCurrentNetworkStatus() {
+    return NetworkConnectivityMonitor.instance.currentStatus;
+  }
+  
+  /// Get current network type
+  static NetworkType getCurrentNetworkType() {
+    return NetworkConnectivityMonitor.instance.currentType;
+  }
+  
+  /// Check if network is connected
+  static bool isNetworkConnected() {
+    return NetworkConnectivityMonitor.instance.isConnected;
+  }
+  
+  /// Wait for network connection
+  static Future<bool> waitForNetworkConnection({Duration? timeout}) async {
+    return await NetworkConnectivityMonitor.instance.waitForConnection(timeout: timeout);
+  }
+  
+  /// Get network status description
+  static String getNetworkStatusDescription() {
+    return NetworkConnectivityMonitor.instance.getStatusDescription();
+  }
+  
+  /// Execute request with network adaptation
+  static Future<T> executeWithNetworkAdaptation<T>(
+    Future<T> Function() request, {
+    NetworkAdaptationStrategy? strategy,
+    T? cachedData,
+  }) async {
+    return await NetworkAdapter.instance.executeWithAdaptation(
+      request,
+      strategy: strategy,
+      cachedData: cachedData,
+    );
+  }
+  
+  /// Get recommended timeout based on network quality
+  static Duration getRecommendedTimeout({Duration? baseTimeout}) {
+    return NetworkAdapter.instance.getRecommendedTimeout(baseTimeout: baseTimeout);
+  }
+  
+  /// Get recommended retry count based on network quality
+  static int getRecommendedRetryCount({int? baseRetryCount}) {
+    return NetworkAdapter.instance.getRecommendedRetryCount(baseRetryCount: baseRetryCount);
   }
   
   /// Determine exception type
