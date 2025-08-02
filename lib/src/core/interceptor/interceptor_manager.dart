@@ -156,35 +156,61 @@ class InterceptorManager {
     }
 
     final startTime = DateTime.now();
-    try {
-      final customHandler = CustomRequestInterceptorHandler(
-        onNext: (req) {
-          final duration = DateTime.now().difference(startTime);
-          _statistics.recordExecution(name, InterceptorType.request, duration, true);
-          _executeRequestChain(index + 1, req, handler);
-        },
-        onError: (err) {
-          final duration = DateTime.now().difference(startTime);
-          _statistics.recordExecution(name, InterceptorType.request, duration, false);
-          handler.reject(err);
+    
+    // 应用执行超时控制
+    _executeWithTimeout(
+      name,
+      config.timeout,
+      () async {
+        final customHandler = CustomRequestInterceptorHandler(
+          onNext: (req) {
+            final duration = DateTime.now().difference(startTime);
+            _statistics.recordExecution(name, InterceptorType.request, duration, true);
+            _executeRequestChain(index + 1, req, handler);
+          },
+          onError: (err) {
+            final duration = DateTime.now().difference(startTime);
+            _statistics.recordExecution(name, InterceptorType.request, duration, false);
+            handler.reject(err);
+          }
+        );
+        interceptor.onRequest(options, customHandler);
+      },
+      onTimeout: () {
+        final duration = DateTime.now().difference(startTime);
+        _statistics.recordExecution(name, InterceptorType.request, duration, false);
+        if (config.continueOnError) {
+          if (kDebugMode) {
+            debugPrint('请求拦截器 "$name" 执行超时，继续执行');
+          }
+          _executeRequestChain(index + 1, options, handler);
+        } else {
+          if (kDebugMode) {
+            debugPrint('请求拦截器 "$name" 执行超时，中断执行');
+          }
+          handler.reject(DioException(
+            requestOptions: options,
+            error: TimeoutException('拦截器执行超时', config.timeout),
+            type: DioExceptionType.unknown,
+          ));
         }
-      );
-      interceptor.onRequest(options, customHandler);
-    } catch (e) {
-      final duration = DateTime.now().difference(startTime);
-      _statistics.recordExecution(name, InterceptorType.request, duration, false);
-      if (config.continueOnError) {
-        if (kDebugMode) {
-          debugPrint('请求拦截器 "$name" 执行失败，继续执行: $e');
+      },
+      onError: (e) {
+        final duration = DateTime.now().difference(startTime);
+        _statistics.recordExecution(name, InterceptorType.request, duration, false);
+        if (config.continueOnError) {
+          if (kDebugMode) {
+            debugPrint('请求拦截器 "$name" 执行失败，继续执行: $e');
+          }
+          _executeRequestChain(index + 1, options, handler);
+        } else {
+          if (kDebugMode) {
+            debugPrint('请求拦截器 "$name" 执行失败，中断执行: $e');
+          }
+          handler.reject(e is DioException ? e : DioException(requestOptions: options, error: e));
         }
-        _executeRequestChain(index + 1, options, handler);
-      } else {
-        if (kDebugMode) {
-          debugPrint('请求拦截器 "$name" 执行失败，中断执行: $e');
-        }
-        handler.reject(e is DioException ? e : DioException(requestOptions: options, error: e));
-      }
-    }
+      },
+    );
   }
   
   /// 执行响应拦截
@@ -208,35 +234,61 @@ class InterceptorManager {
     }
 
     final startTime = DateTime.now();
-    try {
-      final customHandler = CustomResponseInterceptorHandler(
-        onNext: (res) {
-          final duration = DateTime.now().difference(startTime);
-          _statistics.recordExecution(name, InterceptorType.response, duration, true);
-          _executeResponseChain(index - 1, res, handler);
-        },
-        onError: (err) {
-          final duration = DateTime.now().difference(startTime);
-          _statistics.recordExecution(name, InterceptorType.response, duration, false);
-          handler.reject(err);
+    
+    // 应用执行超时控制
+    _executeWithTimeout(
+      name,
+      config.timeout,
+      () async {
+        final customHandler = CustomResponseInterceptorHandler(
+          onNext: (res) {
+            final duration = DateTime.now().difference(startTime);
+            _statistics.recordExecution(name, InterceptorType.response, duration, true);
+            _executeResponseChain(index - 1, res, handler);
+          },
+          onError: (err) {
+            final duration = DateTime.now().difference(startTime);
+            _statistics.recordExecution(name, InterceptorType.response, duration, false);
+            handler.reject(err);
+          }
+        );
+        interceptor.onResponse(response, customHandler);
+      },
+      onTimeout: () {
+        final duration = DateTime.now().difference(startTime);
+        _statistics.recordExecution(name, InterceptorType.response, duration, false);
+        if (config.continueOnError) {
+          if (kDebugMode) {
+            debugPrint('响应拦截器 "$name" 执行超时，继续执行');
+          }
+          _executeResponseChain(index - 1, response, handler);
+        } else {
+          if (kDebugMode) {
+            debugPrint('响应拦截器 "$name" 执行超时，中断执行');
+          }
+          handler.reject(DioException(
+            requestOptions: response.requestOptions,
+            error: TimeoutException('拦截器执行超时', config.timeout),
+            type: DioExceptionType.unknown,
+          ));
         }
-      );
-      interceptor.onResponse(response, customHandler);
-    } catch (e) {
-      final duration = DateTime.now().difference(startTime);
-      _statistics.recordExecution(name, InterceptorType.response, duration, false);
-      if (config.continueOnError) {
-        if (kDebugMode) {
-          debugPrint('响应拦截器 "$name" 执行失败，继续执行: $e');
+      },
+      onError: (e) {
+        final duration = DateTime.now().difference(startTime);
+        _statistics.recordExecution(name, InterceptorType.response, duration, false);
+        if (config.continueOnError) {
+          if (kDebugMode) {
+            debugPrint('响应拦截器 "$name" 执行失败，继续执行: $e');
+          }
+          _executeResponseChain(index - 1, response, handler);
+        } else {
+          if (kDebugMode) {
+            debugPrint('响应拦截器 "$name" 执行失败，中断执行: $e');
+          }
+          handler.reject(e is DioException ? e : DioException(requestOptions: response.requestOptions, error: e));
         }
-        _executeResponseChain(index - 1, response, handler);
-      } else {
-        if (kDebugMode) {
-          debugPrint('响应拦截器 "$name" 执行失败，中断执行: $e');
-        }
-        handler.reject(e is DioException ? e : DioException(requestOptions: response.requestOptions, error: e));
-      }
-    }
+      },
+    );
   }
   
   /// 执行错误拦截
@@ -260,35 +312,61 @@ class InterceptorManager {
     }
 
     final startTime = DateTime.now();
-    try {
-      final customHandler = CustomErrorInterceptorHandler(
-        onNext: (error) {
-          final duration = DateTime.now().difference(startTime);
-          _statistics.recordExecution(name, InterceptorType.error, duration, true);
-          _executeErrorChain(index + 1, error, handler);
-        },
-        onError: (error) {
-          final duration = DateTime.now().difference(startTime);
-          _statistics.recordExecution(name, InterceptorType.error, duration, false);
-          handler.reject(error);
+    
+    // 应用执行超时控制
+    _executeWithTimeout(
+      name,
+      config.timeout,
+      () async {
+        final customHandler = CustomErrorInterceptorHandler(
+          onNext: (error) {
+            final duration = DateTime.now().difference(startTime);
+            _statistics.recordExecution(name, InterceptorType.error, duration, true);
+            _executeErrorChain(index + 1, error, handler);
+          },
+          onError: (error) {
+            final duration = DateTime.now().difference(startTime);
+            _statistics.recordExecution(name, InterceptorType.error, duration, false);
+            handler.reject(error);
+          }
+        );
+        interceptor.onError(err, customHandler);
+      },
+      onTimeout: () {
+        final duration = DateTime.now().difference(startTime);
+        _statistics.recordExecution(name, InterceptorType.error, duration, false);
+        if (config.continueOnError) {
+          if (kDebugMode) {
+            debugPrint('错误拦截器 "$name" 执行超时，继续执行');
+          }
+          _executeErrorChain(index + 1, err, handler);
+        } else {
+          if (kDebugMode) {
+            debugPrint('错误拦截器 "$name" 执行超时，中断执行');
+          }
+          handler.reject(DioException(
+            requestOptions: err.requestOptions,
+            error: TimeoutException('拦截器执行超时', config.timeout),
+            type: DioExceptionType.unknown,
+          ));
         }
-      );
-      interceptor.onError(err, customHandler);
-    } catch (e) {
-      final duration = DateTime.now().difference(startTime);
-      _statistics.recordExecution(name, InterceptorType.error, duration, false);
-      if (config.continueOnError) {
-        if (kDebugMode) {
-          debugPrint('错误拦截器 "$name" 执行失败，继续执行: $e');
+      },
+      onError: (e) {
+        final duration = DateTime.now().difference(startTime);
+        _statistics.recordExecution(name, InterceptorType.error, duration, false);
+        if (config.continueOnError) {
+          if (kDebugMode) {
+            debugPrint('错误拦截器 "$name" 执行失败，继续执行: $e');
+          }
+          _executeErrorChain(index + 1, err, handler);
+        } else {
+          if (kDebugMode) {
+            debugPrint('错误拦截器 "$name" 执行失败，中断执行: $e');
+          }
+          handler.reject(e is DioException ? e : DioException(requestOptions: err.requestOptions, error: e));
         }
-        _executeErrorChain(index + 1, err, handler);
-      } else {
-        if (kDebugMode) {
-          debugPrint('错误拦截器 "$name" 执行失败，中断执行: $e');
-        }
-        handler.reject(e is DioException ? e : DioException(requestOptions: err.requestOptions, error: e));
-      }
-    }
+      },
+    );
   }
   
   /// 根据优先级插入拦截器
@@ -339,6 +417,47 @@ class InterceptorManager {
     _configs.clear();
     _executionOrder.clear();
     _statistics.reset();
+  }
+
+  /// 执行带超时控制的操作
+  void _executeWithTimeout(
+    String interceptorName,
+    Duration? timeout,
+    Future<void> Function() operation,
+    {
+    required VoidCallback onTimeout,
+    required Function(dynamic) onError,
+  }) {
+    if (timeout == null) {
+      // 没有配置超时，直接执行
+      operation().catchError(onError);
+      return;
+    }
+
+    Timer? timeoutTimer;
+    bool completed = false;
+
+    // 设置超时定时器
+    timeoutTimer = Timer(timeout, () {
+      if (!completed) {
+        completed = true;
+        onTimeout();
+      }
+    });
+
+    // 执行操作
+    operation().then((_) {
+      if (!completed) {
+        completed = true;
+        timeoutTimer?.cancel();
+      }
+    }).catchError((error) {
+      if (!completed) {
+        completed = true;
+        timeoutTimer?.cancel();
+        onError(error);
+      }
+    });
   }
 }
 
