@@ -5,12 +5,28 @@ English | [中文](README.md)
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.1-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.3-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY Network Framework** is a high-performance, easily extensible Flutter network request solution that provides comprehensive network requests, caching, interceptors, monitoring, and other features.
 
-## 🆕 Latest Updates (v1.0.1)
+## 🆕 Latest Updates (v1.0.3)
 
+- 🔒 **Concurrency Safety Enhancement**: Refined lock granularity by replacing global locks with specialized locks, reducing lock contention and improving concurrent throughput
+- 🚀 **Queue Management Optimization**: Implemented efficient priority queue to replace multiple queue implementation, improving processing efficiency
+- ⏱️ **Timeout Mechanism Improvement**: Added global timeout monitoring to periodically check long-pending requests
+- 🔄 **Retry Mechanism Enhancement**: Designed specific retry strategies for different types of errors, improving retry success rate
+- 💾 **Cache Management Optimization**: Limited disk I/O queue size, improved timer management, and ensured proper resource release
+- 🧠 **Memory Management Enhancement**: Optimized resource release mechanisms to prevent memory leaks and improve long-running stability
+- 📊 **Monitoring Capability Upgrade**: Added more detailed performance metrics monitoring, supporting request time consumption, success rate, and other statistics
+
+### v1.0.2 Updates
+- ⚡ **Configuration Optimization**: Optimized timeout settings (connection 15s, receive/send 30s), adjusted cache strategy (development 5 minutes, production 15 minutes)
+- 🔄 **Smart Retry**: Added exponential backoff retry mechanism, maximum 3 retries, improving network request success rate
+- 📋 **Configuration Presets**: Added multiple configuration preset templates (development, production, fast response, heavy load, offline first, low bandwidth)
+- 🛡️ **Configuration Validation**: Enhanced configuration validator, supporting exponential backoff configuration validation
+- 📚 **Example Enhancement**: Added configuration preset usage examples, simplifying common scenario configurations
+
+### v1.0.1 Updates
 - 🔄 **Unified queryParameters Approach**: Implemented unified use of `queryParameters` for all HTTP request data
 - 🚀 **Automatic Data Conversion**: GET/DELETE requests automatically use URL parameters, POST/PUT/PATCH requests automatically convert to request body
 - 📚 **Enhanced Documentation**: Added comprehensive documentation and examples for the unified approach

@@ -13,17 +13,16 @@ class RequestQueueManager {
   // 队列配置
   late QueueConfig _config;
   
-  // 并发锁
-  final Lock _queueLock = Lock();
-  final Lock _executingLock = Lock();
+  // 细化锁粒度，将大锁拆分为多个小锁
+  final Lock _queueStateLock = Lock(); // 队列状态锁
+  final Lock _requestStateLock = Lock(); // 请求状态锁
+  final Lock _duplicateLock = Lock(); // 去重映射锁
+  final Lock _statisticsLock = Lock(); // 统计信息锁
   
-  // 请求队列（按优先级分组）
-  final Map<RequestPriority, Queue<QueuedRequest>> _queues = {
-    RequestPriority.critical: Queue<QueuedRequest>(),
-    RequestPriority.high: Queue<QueuedRequest>(),
-    RequestPriority.normal: Queue<QueuedRequest>(),
-    RequestPriority.low: Queue<QueuedRequest>(),
-  };
+  // 使用优先级队列数据结构
+  final PriorityQueue<QueuedRequest> _priorityQueue = PriorityQueue<QueuedRequest>(
+    (a, b) => a.priority.index.compareTo(b.priority.index)
+  );
   
   // 正在执行的请求
   final Set<String> _executingRequests = {};
@@ -67,48 +66,53 @@ class RequestQueueManager {
     bool enableDeduplication = true,
     Map<String, dynamic>? metadata,
   }) async {
-    return await _queueLock.synchronized(() async {
-      final effectiveRequestId = requestId ?? _generateRequestId();
-      final completer = Completer<T>();
+    final effectiveRequestId = requestId ?? _generateRequestId();
+    final completer = Completer<T>();
+    
+    final queuedRequest = QueuedRequest<T>(
+      id: effectiveRequestId,
+      requestFunction: requestFunction,
+      completer: completer,
+      priority: priority,
+      timeout: timeout ?? _config.defaultTimeout,
+      enableDeduplication: enableDeduplication,
+      metadata: metadata ?? {},
+      enqueuedAt: DateTime.now(),
+    );
+    
+    // 检查请求去重 - 使用专用锁
+    if (enableDeduplication && _config.enableDeduplication) {
+      final duplicateKey = _generateDeduplicationKey(queuedRequest);
       
-      final queuedRequest = QueuedRequest<T>(
-        id: effectiveRequestId,
-        requestFunction: requestFunction,
-        completer: completer,
-        priority: priority,
-        timeout: timeout ?? _config.defaultTimeout,
-        enableDeduplication: enableDeduplication,
-        metadata: metadata ?? {},
-        enqueuedAt: DateTime.now(),
-      );
-      
-      // 检查请求去重
-      if (enableDeduplication && _config.enableDeduplication) {
-        final duplicateKey = _generateDeduplicationKey(queuedRequest);
-        
+      bool hasDuplicate = false;
+      await _duplicateLock.synchronized(() async {
         // 更严格的重复请求检查
         if (_duplicateRequests.containsKey(duplicateKey)) {
           final existingRequests = _duplicateRequests[duplicateKey]!;
           
           // 检查是否有正在执行的相同请求
-          final hasExecutingRequest = existingRequests.any((req) => 
-            _executingRequests.contains(req.id) && 
-            _requestCompleted[req.id] != true
-          );
+          final hasExecutingRequest = await _requestStateLock.synchronized(() {
+            return existingRequests.any((req) => 
+              _executingRequests.contains(req.id) && 
+              _requestCompleted[req.id] != true
+            );
+          });
           
           // 检查是否有等待中的相同请求
           final hasPendingRequest = existingRequests.any((req) => 
-            _queues[req.priority]!.contains(req) && 
-            _requestCompleted[req.id] != true
+            !_executingRequests.contains(req.id) && 
+            !req.completer.isCompleted
           );
           
           if (hasExecutingRequest || hasPendingRequest) {
             // 如果有正在执行或等待的相同请求，将新请求添加到重复列表
             existingRequests.add(queuedRequest);
-            _statistics.duplicateRequests++;
             
-            // 请求去重: $effectiveRequestId (去重键: $duplicateKey)
-            return completer.future;
+            await _statisticsLock.synchronized(() {
+              _statistics.duplicateRequests++;
+            });
+            
+            hasDuplicate = true;
           } else {
             // 如果没有活跃的相同请求，清理旧的重复请求记录
             _duplicateRequests.remove(duplicateKey);
@@ -116,40 +120,53 @@ class RequestQueueManager {
         }
         
         // 创建新的重复请求列表
-      _duplicateRequests[duplicateKey] = [queuedRequest];
-    }
-    
-    // 检查队列大小限制
-    final totalQueueSize = _getTotalQueueSize();
-    if (totalQueueSize >= _config.maxQueueSize) {
-      // 队列已满，根据溢出策略处理
-      final handled = _handleQueueOverflow(queuedRequest);
-      if (!handled) {
-        // 拒绝新请求
-        queuedRequest.completer.completeError(
-          DioException(
-            requestOptions: RequestOptions(path: ''),
-            message: '队列已满，请求被拒绝 (当前队列大小: $totalQueueSize, 最大: ${_config.maxQueueSize})',
-            type: DioExceptionType.cancel,
-          ),
-        );
-        _statistics.rejectedRequests++;
+        if (!hasDuplicate) {
+          _duplicateRequests[duplicateKey] = [queuedRequest];
+        }
+      });
+      
+      if (hasDuplicate) {
         return completer.future;
       }
     }
     
-    // 添加到对应优先级队列
-    _queues[priority]!.add(queuedRequest);
-    _statistics.totalEnqueued++;
-    _statistics.queueSizes[priority] = (_statistics.queueSizes[priority] ?? 0) + 1;
-    
-    // 请求已入队: $effectiveRequestId (优先级: $priority)
+    // 检查队列大小限制 - 使用队列状态锁
+    await _queueStateLock.synchronized(() async {
+      final totalQueueSize = _priorityQueue.length;
+      if (totalQueueSize >= _config.maxQueueSize) {
+        // 队列已满，根据溢出策略处理
+        final handled = await _handleQueueOverflow(queuedRequest);
+        if (!handled) {
+          // 拒绝新请求
+          queuedRequest.completer.completeError(
+            DioException(
+              requestOptions: RequestOptions(path: ''),
+              message: '队列已满，请求被拒绝 (当前队列大小: $totalQueueSize, 最大: ${_config.maxQueueSize})',
+              type: DioExceptionType.cancel,
+            ),
+          );
+          
+          await _statisticsLock.synchronized(() {
+            _statistics.rejectedRequests++;
+          });
+          
+          return;
+        }
+      }
+      
+      // 添加到优先级队列
+      _priorityQueue.add(queuedRequest);
+      
+      await _statisticsLock.synchronized(() {
+        _statistics.totalEnqueued++;
+        _statistics.queueSizes[priority] = (_statistics.queueSizes[priority] ?? 0) + 1;
+      });
+    });
     
     // 立即尝试处理队列
     _processQueue();
       
-      return completer.future;
-    });
+    return completer.future;
   }
   
   /// 取消请求
@@ -241,44 +258,115 @@ class RequestQueueManager {
     _processingTimer = Timer.periodic(_config.processingInterval, (timer) {
       _processQueue();
     });
+    
+    // 添加队列超时监控
+    _startQueueTimeoutMonitoring();
   }
   
-  /// 处理队列
-  void _processQueue() {
-    _queueLock.synchronized(() {
-      // 检查并发限制
-      if (_executingRequests.length >= _config.maxConcurrentRequests) {
-        return;
+  /// 开始队列超时监控
+  void _startQueueTimeoutMonitoring() {
+    Timer.periodic(const Duration(seconds: 30), (timer) {
+      _checkQueueTimeout();
+    });
+  }
+  
+  /// 检查队列处理超时
+  Future<void> _checkQueueTimeout() async {
+    final now = DateTime.now();
+    
+    await _queueStateLock.synchronized(() async {
+      // 检查队列中长时间未处理的请求
+      final requestsToKeep = <QueuedRequest>[];
+      final requestsToTimeout = <QueuedRequest>[];
+      
+      while (_priorityQueue.isNotEmpty) {
+        final request = _priorityQueue.removeFirst();
+        final queueTime = now.difference(request.enqueuedAt);
+        
+        if (queueTime > _config.maxQueueTime) {
+          requestsToTimeout.add(request);
+        } else {
+          requestsToKeep.add(request);
+        }
       }
       
-      // 按优先级顺序处理请求
-      for (final priority in RequestPriority.values) {
-        final queue = _queues[priority]!;
-        
-        while (queue.isNotEmpty && _executingRequests.length < _config.maxConcurrentRequests) {
-          final request = queue.removeFirst();
-          _statistics.queueSizes[priority] = (_statistics.queueSizes[priority] ?? 0) - 1;
-          
-          // 检查请求是否超时
-          if (_isRequestExpired(request)) {
-            _handleExpiredRequest(request);
-            continue;
-          }
-          
-          // 执行请求
-          _executeRequest(request);
+      // 将保留的请求重新添加到队列
+      for (final request in requestsToKeep) {
+        _priorityQueue.add(request);
+      }
+      
+      // 处理超时请求
+      for (final request in requestsToTimeout) {
+        _handleExpiredRequest(request);
+      }
+    });
+    
+    // 检查执行中但可能卡住的请求
+    await _requestStateLock.synchronized(() async {
+      final executingCopy = Set<String>.from(_executingRequests);
+      for (final requestId in executingCopy) {
+        final isCompleted = _requestCompleted[requestId] == true;
+        if (!isCompleted) {
+          // 这里可以添加额外的检查逻辑，例如检查请求执行时间
+          // 如果需要强制完成卡住的请求，可以在这里实现
         }
       }
     });
   }
   
+  /// 处理队列
+  Future<void> _processQueue() async {
+    // 检查并发限制
+    int availableSlots = 0;
+    
+    await _requestStateLock.synchronized(() {
+      availableSlots = _config.maxConcurrentRequests - _executingRequests.length;
+    });
+    
+    if (availableSlots <= 0) {
+      return;
+    }
+    
+    // 处理队列中的请求
+    final requestsToExecute = <QueuedRequest>[];
+    
+    await _queueStateLock.synchronized(() async {
+      // 从队列中取出请求
+      while (_priorityQueue.isNotEmpty && requestsToExecute.length < availableSlots) {
+        final request = _priorityQueue.removeFirst();
+        
+        // 检查请求是否超时
+        if (_isRequestExpired(request)) {
+          _handleExpiredRequest(request);
+          continue;
+        }
+        
+        requestsToExecute.add(request);
+        
+        await _statisticsLock.synchronized(() {
+          final priority = request.priority;
+          _statistics.queueSizes[priority] = 
+              (_statistics.queueSizes[priority] ?? 0) - 1;
+        });
+      }
+    });
+    
+    // 执行请求
+    for (final request in requestsToExecute) {
+      _executeRequest(request);
+    }
+  }
+  
   /// 执行请求
-  void _executeRequest(QueuedRequest request) {
+  Future<void> _executeRequest(QueuedRequest request) async {
     // 原子操作：添加到执行中请求集合
-    _executingLock.synchronized(() {
+    await _requestStateLock.synchronized(() {
       _executingRequests.add(request.id);
-      _statistics.totalExecuted++;
       _requestCompleted[request.id] = false;
+    });
+    
+    await _statisticsLock.synchronized(() {
+      _statistics.totalExecuted++;
     });
     
     final startTime = DateTime.now();
@@ -292,20 +380,22 @@ class RequestQueueManager {
     }
     
     // 执行请求
-    request.requestFunction().then((response) {
+    try {
+      final response = await request.requestFunction();
       timeoutTimer?.cancel();
-      _handleRequestSuccess(request, response, startTime);
-    }).catchError((error) {
+      await _handleRequestSuccess(request, response, startTime);
+    } catch (error) {
       timeoutTimer?.cancel();
-      _handleRequestError(request, error, startTime);
-    });
+      await _handleRequestError(request, error, startTime);
+    }
   }
   
   /// 处理请求成功
-  void _handleRequestSuccess(QueuedRequest request, Response response, DateTime startTime) {
+  Future<void> _handleRequestSuccess(QueuedRequest request, Response response, DateTime startTime) async {
     // 原子操作：检查和更新请求完成状态
     bool shouldProcess = false;
-    _executingLock.synchronized(() {
+    
+    await _requestStateLock.synchronized(() {
       if (_requestCompleted[request.id] != true) {
         _requestCompleted[request.id] = true;
         shouldProcess = true;
@@ -318,17 +408,21 @@ class RequestQueueManager {
     
     try {
       // 原子操作：更新执行状态和统计
-      _executingLock.synchronized(() {
+      await _requestStateLock.synchronized(() {
         _executingRequests.remove(request.id);
+      });
+      
+      final duration = DateTime.now().difference(startTime);
+      
+      await _statisticsLock.synchronized(() {
         _statistics.successfulRequests++;
-        
-        final duration = DateTime.now().difference(startTime);
         _statistics.updateExecutionTime(duration);
       });
       
       // 原子操作：处理重复请求
       List<QueuedRequest>? duplicateRequests;
-      _queueLock.synchronized(() {
+      
+      await _duplicateLock.synchronized(() {
         final duplicateKey = _generateDeduplicationKey(request);
         duplicateRequests = _duplicateRequests[duplicateKey];
         if (duplicateRequests != null) {
@@ -390,19 +484,18 @@ class RequestQueueManager {
       }
     } finally {
       // 原子操作：清理状态
-      _executingLock.synchronized(() {
+      await _requestStateLock.synchronized(() {
         _requestCompleted.remove(request.id);
       });
     }
-    
-    // 请求执行成功: ${request.id} (耗时: ${DateTime.now().difference(startTime).inMilliseconds}ms)
   }
   
   /// 处理请求错误
-  void _handleRequestError(QueuedRequest request, dynamic error, DateTime startTime) {
+  Future<void> _handleRequestError(QueuedRequest request, dynamic error, DateTime startTime) async {
     // 原子操作：检查和更新请求完成状态
     bool shouldProcess = false;
-    _executingLock.synchronized(() {
+    
+    await _requestStateLock.synchronized(() {
       if (_requestCompleted[request.id] != true) {
         _requestCompleted[request.id] = true;
         shouldProcess = true;
@@ -415,27 +508,32 @@ class RequestQueueManager {
     
     try {
       // 原子操作：更新执行状态和统计
-      _executingLock.synchronized(() {
+      await _requestStateLock.synchronized(() {
         _executingRequests.remove(request.id);
+      });
+      
+      final duration = DateTime.now().difference(startTime);
+      
+      await _statisticsLock.synchronized(() {
         _statistics.failedRequests++;
-        
-        final duration = DateTime.now().difference(startTime);
         _statistics.updateExecutionTime(duration);
       });
       
       // 检查是否需要重试
-      if (_shouldRetryRequest(request, error)) {
+      if (await _shouldRetryRequest(request, error)) {
         // 原子操作：重置状态以允许重试
-        _executingLock.synchronized(() {
+        await _requestStateLock.synchronized(() {
           _requestCompleted[request.id] = false;
         });
-        _retryRequest(request);
+        
+        await _retryRequest(request);
         return;
       }
       
       // 原子操作：处理重复请求
       List<QueuedRequest>? duplicateRequests;
-      _queueLock.synchronized(() {
+      
+      await _duplicateLock.synchronized(() {
         final duplicateKey = _generateDeduplicationKey(request);
         duplicateRequests = _duplicateRequests[duplicateKey];
         if (duplicateRequests != null) {
@@ -497,22 +595,32 @@ class RequestQueueManager {
       }
     } finally {
       // 清理状态
-      _requestCompleted.remove(request.id);
+      await _requestStateLock.synchronized(() {
+        _requestCompleted.remove(request.id);
+      });
     }
-    
-    // 请求执行失败: ${request.id} (耗时: ${DateTime.now().difference(startTime).inMilliseconds}ms, 错误: $error)
   }
   
   /// 处理请求超时
-  void _handleRequestTimeout(QueuedRequest request) {
+  Future<void> _handleRequestTimeout(QueuedRequest request) async {
     // 检查是否已经处理过
-    if (_requestCompleted[request.id] == true) {
+    bool shouldProcess = false;
+    
+    await _requestStateLock.synchronized(() {
+      if (_requestCompleted[request.id] != true) {
+        _requestCompleted[request.id] = true;
+        _executingRequests.remove(request.id);
+        shouldProcess = true;
+      }
+    });
+    
+    if (!shouldProcess) {
       return;
     }
-    _requestCompleted[request.id] = true;
     
-    _executingRequests.remove(request.id);
-    _statistics.timeoutRequests++;
+    await _statisticsLock.synchronized(() {
+      _statistics.timeoutRequests++;
+    });
     
     final error = DioException(
       requestOptions: RequestOptions(path: ''),
@@ -521,34 +629,53 @@ class RequestQueueManager {
     );
     
     // 检查是否需要重试
-    if (_shouldRetryRequest(request, error)) {
+    if (await _shouldRetryRequest(request, error)) {
       // 重置状态以允许重试
-      _requestCompleted[request.id] = false;
-      _retryRequest(request);
+      await _requestStateLock.synchronized(() {
+        _requestCompleted[request.id] = false;
+      });
+      
+      await _retryRequest(request);
       return;
     }
     
     // 处理重复请求
-    final duplicateKey = _generateDeduplicationKey(request);
-    final duplicateRequests = _duplicateRequests[duplicateKey];
+    List<QueuedRequest>? duplicateRequests;
+    
+    await _duplicateLock.synchronized(() {
+      final duplicateKey = _generateDeduplicationKey(request);
+      duplicateRequests = _duplicateRequests[duplicateKey];
+      if (duplicateRequests != null) {
+        _duplicateRequests.remove(duplicateKey);
+      }
+    });
+    
     if (duplicateRequests != null) {
-      for (final duplicateRequest in duplicateRequests) {
+      for (final duplicateRequest in duplicateRequests!) {
         try {
           if (!duplicateRequest.completer.isCompleted) {
             duplicateRequest.completer.completeError(error);
           }
         } catch (e) {
           // 记录错误但不影响其他请求
-          // 完成请求超时时发生错误: $e
+          print('完成请求超时时发生错误: $e');
         }
       }
-      _duplicateRequests.remove(duplicateKey);
+    }
+    
+    // 完成原始请求
+    try {
+      if (!request.completer.isCompleted) {
+        request.completer.completeError(error);
+      }
+    } catch (e) {
+      print('完成原始请求超时时发生错误: $e');
     }
     
     // 清理状态
-    _requestCompleted.remove(request.id);
-    
-    // 请求超时: ${request.id}
+    await _requestStateLock.synchronized(() {
+      _requestCompleted.remove(request.id);
+    });
   }
   
   /// 处理过期请求
@@ -571,21 +698,32 @@ class RequestQueueManager {
   }
   
   /// 重试请求
-  void _retryRequest(QueuedRequest request) {
+  Future<void> _retryRequest(QueuedRequest request) async {
     request.retryCount++;
+    
+    await _statisticsLock.synchronized(() {
+      _statistics.retryRequests++;
+    });
     
     if (request.retryCount <= _config.maxRetryCount) {
       // 计算重试延迟
       final delay = _calculateRetryDelay(request.retryCount);
       
-      Timer(delay, () {
-        // 重新入队
-        _queues[request.priority]!.add(request);
-        _statistics.queueSizes[request.priority] = (_statistics.queueSizes[request.priority] ?? 0) + 1;
-        _statistics.retryRequests++;
+      await Future.delayed(delay);
+      
+      // 重新入队
+      await _queueStateLock.synchronized(() {
+        _priorityQueue.add(request);
         
-        // 请求重试: ${request.id} (第${request.retryCount}次)
+        _statisticsLock.synchronized(() {
+          final priority = request.priority;
+          _statistics.queueSizes[priority] = 
+              (_statistics.queueSizes[priority] ?? 0) + 1;
+        });
       });
+      
+      // 立即尝试处理队列
+      _processQueue();
     } else {
       // 重试次数用尽，返回错误
       final error = DioException(
@@ -597,20 +735,32 @@ class RequestQueueManager {
       request.completer.completeError(error);
       
       // 清理重复请求
-      final duplicateKey = _generateDeduplicationKey(request);
-      _duplicateRequests.remove(duplicateKey);
+      await _duplicateLock.synchronized(() {
+        final duplicateKey = _generateDeduplicationKey(request);
+        _duplicateRequests.remove(duplicateKey);
+      });
     }
   }
   
   /// 检查是否应该重试请求
-  bool _shouldRetryRequest(QueuedRequest request, dynamic error) {
+  Future<bool> _shouldRetryRequest(QueuedRequest request, dynamic error) async {
     if (request.retryCount >= _config.maxRetryCount) {
       return false;
     }
     
     // 检查请求方法的幂等性
     final method = request.metadata['method']?.toString().toUpperCase() ?? 'UNKNOWN';
-    if (!_isIdempotentMethod(method)) {
+    
+    // 增强幂等性判断，考虑请求内容和上下文
+    bool isIdempotent = _isIdempotentMethod(method);
+    
+    // 检查自定义幂等性标记
+    final customIdempotent = request.metadata['idempotent'];
+    if (customIdempotent != null) {
+      isIdempotent = customIdempotent == true;
+    }
+    
+    if (!isIdempotent) {
       // 非幂等请求不允许重试，除非是网络连接错误
       if (error is DioException) {
         switch (error.type) {
@@ -625,18 +775,28 @@ class RequestQueueManager {
       return false;
     }
     
-    // 检查错误类型
+    // 差异化重试策略：为不同类型的错误设计特定的重试策略
     if (error is DioException) {
       switch (error.type) {
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.receiveTimeout:
         case DioExceptionType.sendTimeout:
-        case DioExceptionType.connectionError:
+          // 超时错误：使用指数退避策略
           return true;
+          
+        case DioExceptionType.connectionError:
+          // 连接错误：立即重试
+          return true;
+          
         case DioExceptionType.badResponse:
-          // 5xx错误可以重试（仅限幂等请求）
+          // 服务器错误：仅重试5xx错误
           final statusCode = error.response?.statusCode;
-          return statusCode != null && statusCode >= 500;
+          if (statusCode != null && statusCode >= 500) {
+            // 对于服务器错误，使用递增延迟
+            return true;
+          }
+          return false;
+          
         default:
           return false;
       }
@@ -715,6 +875,31 @@ class RequestQueueManager {
       buffer.write('no-params');
     }
     
+    // 添加请求头哈希（如果存在）- 增强去重机制
+    final headers = request.metadata['headers'];
+    if (headers != null && headers is Map) {
+      // 只考虑可能影响请求唯一性的关键请求头
+      final relevantHeaders = <String, dynamic>{};
+      final keysToCheck = ['Authorization', 'Content-Type', 'Accept', 'X-Api-Key'];
+      
+      for (final key in keysToCheck) {
+        if (headers.containsKey(key)) {
+          relevantHeaders[key] = headers[key];
+        }
+      }
+      
+      if (relevantHeaders.isNotEmpty) {
+        try {
+          final headersJson = jsonEncode(relevantHeaders);
+          buffer.write('-');
+          buffer.write(headersJson.hashCode);
+        } catch (e) {
+          buffer.write('-');
+          buffer.write(relevantHeaders.hashCode);
+        }
+      }
+    }
+    
     return buffer.toString();
   }
   
@@ -737,64 +922,129 @@ class RequestQueueManager {
   }
   
   /// 处理队列溢出
-  bool _handleQueueOverflow(QueuedRequest queuedRequest) {
+  Future<bool> _handleQueueOverflow(QueuedRequest queuedRequest) async {
     switch (_config.overflowStrategy) {
       case QueueOverflowStrategy.rejectNew:
         return false; // 拒绝新请求
         
       case QueueOverflowStrategy.dropOldest:
-        return _dropOldestRequest();
+        return await _dropOldestRequest();
         
       case QueueOverflowStrategy.dropOldestSamePriority:
-        return _dropOldestSamePriorityRequest(queuedRequest.priority);
+        return await _dropOldestSamePriorityRequest(queuedRequest.priority);
     }
   }
   
   /// 丢弃最旧的低优先级请求
-  bool _dropOldestRequest() {
-    // 按优先级从低到高查找最旧的请求
-    for (final priority in [RequestPriority.low, RequestPriority.normal, RequestPriority.high, RequestPriority.critical]) {
-      final queue = _queues[priority]!;
-      if (queue.isNotEmpty) {
-        final droppedRequest = queue.removeFirst();
-        _statistics.queueSizes[priority] = (_statistics.queueSizes[priority] ?? 0) - 1;
-        
-        // 通知被丢弃的请求
-        droppedRequest.completer.completeError(
-          DioException(
-            requestOptions: RequestOptions(path: ''),
-            message: '请求因队列溢出被丢弃',
-            type: DioExceptionType.cancel,
-          ),
-        );
-        
-        _statistics.cancelledRequests++;
-        return true; // 成功腾出空间
+  Future<bool> _dropOldestRequest() async {
+    // 收集所有请求并按优先级和入队时间排序
+    final allRequests = <QueuedRequest>[];
+    
+    await _queueStateLock.synchronized(() {
+      while (_priorityQueue.isNotEmpty) {
+        allRequests.add(_priorityQueue.removeFirst());
       }
+    });
+    
+    if (allRequests.isEmpty) {
+      return false; // 没有可丢弃的请求
     }
-    return false; // 没有可丢弃的请求
+    
+    // 按优先级从低到高排序，同优先级按入队时间排序
+    allRequests.sort((a, b) {
+      final priorityCompare = a.priority.index.compareTo(b.priority.index);
+      if (priorityCompare != 0) return priorityCompare;
+      return a.enqueuedAt.compareTo(b.enqueuedAt);
+    });
+    
+    // 找到最旧的低优先级请求
+    final oldestRequest = allRequests.removeAt(0);
+    
+    // 将其他请求重新添加到队列
+    await _queueStateLock.synchronized(() {
+      for (final request in allRequests) {
+        _priorityQueue.add(request);
+      }
+    });
+    
+    // 通知被丢弃的请求
+    oldestRequest.completer.completeError(
+      DioException(
+        requestOptions: RequestOptions(path: ''),
+        message: '请求因队列溢出被丢弃',
+        type: DioExceptionType.cancel,
+      ),
+    );
+    
+    await _statisticsLock.synchronized(() {
+      _statistics.cancelledRequests++;
+      final priority = oldestRequest.priority;
+      _statistics.queueSizes[priority] = 
+          (_statistics.queueSizes[priority] ?? 0) - 1;
+    });
+    
+    return true; // 成功腾出空间
   }
   
   /// 丢弃最旧的同优先级请求
-  bool _dropOldestSamePriorityRequest(RequestPriority priority) {
-    final queue = _queues[priority]!;
-    if (queue.isNotEmpty) {
-      final droppedRequest = queue.removeFirst();
-      _statistics.queueSizes[priority] = (_statistics.queueSizes[priority] ?? 0) - 1;
-      
-      // 通知被丢弃的请求
-      droppedRequest.completer.completeError(
-        DioException(
-          requestOptions: RequestOptions(path: ''),
-          message: '请求因队列溢出被丢弃（同优先级）',
-          type: DioExceptionType.cancel,
-        ),
-      );
-      
-      _statistics.cancelledRequests++;
-      return true; // 成功腾出空间
+  Future<bool> _dropOldestSamePriorityRequest(RequestPriority priority) async {
+    // 收集所有请求
+    final allRequests = <QueuedRequest>[];
+    final samepriorityRequests = <QueuedRequest>[];
+    
+    await _queueStateLock.synchronized(() {
+      while (_priorityQueue.isNotEmpty) {
+        final request = _priorityQueue.removeFirst();
+        if (request.priority == priority) {
+          samepriorityRequests.add(request);
+        } else {
+          allRequests.add(request);
+        }
+      }
+    });
+    
+    if (samepriorityRequests.isEmpty) {
+      // 没有同优先级的请求，将所有请求放回队列
+      await _queueStateLock.synchronized(() {
+        for (final request in allRequests) {
+          _priorityQueue.add(request);
+        }
+      });
+      return false;
     }
-    return false; // 没有可丢弃的同优先级请求
+    
+    // 按入队时间排序
+    samepriorityRequests.sort((a, b) => a.enqueuedAt.compareTo(b.enqueuedAt));
+    
+    // 找到最旧的同优先级请求
+    final oldestRequest = samepriorityRequests.removeAt(0);
+    
+    // 将其他请求重新添加到队列
+    await _queueStateLock.synchronized(() {
+      for (final request in allRequests) {
+        _priorityQueue.add(request);
+      }
+      for (final request in samepriorityRequests) {
+        _priorityQueue.add(request);
+      }
+    });
+    
+    // 通知被丢弃的请求
+    oldestRequest.completer.completeError(
+      DioException(
+        requestOptions: RequestOptions(path: ''),
+        message: '请求因队列溢出被丢弃（同优先级）',
+        type: DioExceptionType.cancel,
+      ),
+    );
+    
+    await _statisticsLock.synchronized(() {
+      _statistics.cancelledRequests++;
+      _statistics.queueSizes[priority] = 
+          (_statistics.queueSizes[priority] ?? 0) - 1;
+    });
+    
+    return true; // 成功腾出空间
   }
   
   /// 更新配置

@@ -5,12 +5,21 @@
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.1-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.3-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY 网络框架** 是一个高性能、易扩展的 Flutter 网络请求解决方案，提供完整的网络请求、缓存、拦截器、监控等功能。
 
-## 🆕 最新更新 (v1.0.2)
+## 🆕 最新更新 (v1.0.3)
 
+- 🔒 **并发安全增强**: 细化锁粒度，将全局锁拆分为多个专用锁，减少锁竞争，提高并发吞吐量
+- 🚀 **队列管理优化**: 使用高效的优先级队列替代多队列实现，提高处理效率
+- ⏱️ **超时机制完善**: 添加全局超时监控，定期检查长时间未处理的请求
+- 🔄 **重试机制改进**: 为不同类型的错误设计特定的重试策略，提高重试成功率
+- 💾 **缓存管理优化**: 限制磁盘I/O队列大小，完善定时器管理，确保资源正确释放
+- 🧠 **内存管理增强**: 优化资源释放机制，避免内存泄漏，提高长时间运行稳定性
+- 📊 **监控能力提升**: 增加更详细的性能指标监控，支持请求耗时、成功率等统计
+
+### v1.0.2 更新
 - ⚡ **配置优化**: 优化超时配置（连接15s，接收/发送30s），调整缓存策略（开发5分钟，生产15分钟）
 - 🔄 **智能重试**: 新增指数退避重试机制，最大重试3次，提升网络请求成功率
 - 📋 **配置预设**: 新增多种配置预设模板（开发、生产、快速响应、重负载、离线优先、低带宽）
