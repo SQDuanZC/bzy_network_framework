@@ -46,6 +46,12 @@ class UnifiedNetworkFramework {
     List<NetworkPlugin>? plugins,
     List<GlobalInterceptor>? interceptors,
   }) async {
+    // 空值检查
+    if (baseUrl == null || baseUrl.isEmpty) {
+      NetworkLogger.framework.warning('框架初始化: baseUrl 为空');
+      throw ArgumentError('baseUrl cannot be null or empty');
+    }
+    
     if (_isInitialized) {
       throw StateError('UnifiedNetworkFramework is already initialized');
     }
@@ -91,6 +97,17 @@ class UnifiedNetworkFramework {
   
   /// Register plugin
   Future<void> registerPlugin(NetworkPlugin plugin) async {
+    // 空值检查
+    if (plugin == null) {
+      NetworkLogger.framework.warning('注册插件: plugin 为空');
+      throw ArgumentError('plugin cannot be null');
+    }
+    
+    if (plugin.name == null || plugin.name.isEmpty) {
+      NetworkLogger.framework.warning('注册插件: plugin.name 为空');
+      throw ArgumentError('plugin.name cannot be null or empty');
+    }
+    
     if (_plugins.containsKey(plugin.name)) {
       throw ArgumentError('Plugin ${plugin.name} is already registered');
     }
@@ -106,6 +123,12 @@ class UnifiedNetworkFramework {
   
   /// Unregister plugin
   Future<void> unregisterPlugin(String pluginName) async {
+    // 空值检查
+    if (pluginName == null || pluginName.isEmpty) {
+      NetworkLogger.framework.warning('注销插件: pluginName 为空');
+      throw ArgumentError('pluginName cannot be null or empty');
+    }
+    
     final plugin = _plugins.remove(pluginName);
     if (plugin != null) {
       // Remove plugin interceptors
@@ -119,18 +142,36 @@ class UnifiedNetworkFramework {
   
   /// Register global interceptor
   void registerGlobalInterceptor(GlobalInterceptor interceptor) {
+    // 空值检查
+    if (interceptor == null) {
+      NetworkLogger.framework.warning('注册全局拦截器: interceptor 为空');
+      throw ArgumentError('interceptor cannot be null');
+    }
+    
     _globalInterceptors.add(interceptor);
     _executor.addInterceptor(interceptor);
   }
   
   /// Remove global interceptor
   void removeGlobalInterceptor(GlobalInterceptor interceptor) {
+    // 空值检查
+    if (interceptor == null) {
+      NetworkLogger.framework.warning('移除全局拦截器: interceptor 为空');
+      throw ArgumentError('interceptor cannot be null');
+    }
+    
     _globalInterceptors.remove(interceptor);
     _executor.removeInterceptor(interceptor);
   }
   
   /// Execute network request
   Future<NetworkResponse<T>> execute<T>(BaseNetworkRequest<T> request) async {
+    // 空值检查
+    if (request == null) {
+      NetworkLogger.framework.warning('执行请求: request 为空');
+      throw ArgumentError('request cannot be null');
+    }
+    
     _ensureInitialized();
     
     // Store original request data before execution
@@ -175,6 +216,17 @@ class UnifiedNetworkFramework {
   
   /// Execute batch requests
   Future<List<NetworkResponse>> executeBatch(List<BaseNetworkRequest> requests) async {
+    // 空值检查
+    if (requests == null) {
+      NetworkLogger.framework.warning('执行批量请求: requests 为空');
+      throw ArgumentError('requests cannot be null');
+    }
+    
+    if (requests.isEmpty) {
+      NetworkLogger.framework.warning('执行批量请求: requests 为空列表');
+      throw ArgumentError('requests cannot be empty');
+    }
+    
     _ensureInitialized();
     return await _executor.executeBatch(requests);
   }
@@ -207,12 +259,34 @@ class UnifiedNetworkFramework {
     List<BaseNetworkRequest> requests, {
     int maxConcurrency = 3,
   }) async {
+    // 空值检查
+    if (requests == null) {
+      NetworkLogger.framework.warning('执行并发请求: requests 为空');
+      throw ArgumentError('requests cannot be null');
+    }
+    
+    if (requests.isEmpty) {
+      NetworkLogger.framework.warning('执行并发请求: requests 为空列表');
+      throw ArgumentError('requests cannot be empty');
+    }
+    
+    if (maxConcurrency <= 0) {
+      NetworkLogger.framework.warning('执行并发请求: maxConcurrency 必须大于0');
+      throw ArgumentError('maxConcurrency must be greater than 0');
+    }
+    
     _ensureInitialized();
     return await _executor.executeConcurrent(requests, maxConcurrency: maxConcurrency);
   }
   
   /// Cancel request
   void cancelRequest(BaseNetworkRequest request) {
+    // 空值检查
+    if (request == null) {
+      NetworkLogger.framework.warning('取消请求: request 为空');
+      throw ArgumentError('request cannot be null');
+    }
+    
     _executor.cancelRequest(request);
   }
   
@@ -223,6 +297,12 @@ class UnifiedNetworkFramework {
   
   /// Update configuration
   void updateConfig(Map<String, dynamic> config) {
+    // 空值检查
+    if (config == null) {
+      NetworkLogger.framework.warning('更新配置: config 为空');
+      throw ArgumentError('config cannot be null');
+    }
+    
     final networkConfig = NetworkConfig.instance;
     
     if (config.containsKey('baseUrl')) {

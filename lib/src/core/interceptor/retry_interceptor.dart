@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import '../config/network_config.dart';
+import '../../config/network_config.dart';
 import '../../utils/network_utils.dart';
 
 /// 重试拦截器
@@ -19,7 +19,7 @@ class RetryInterceptor extends Interceptor {
     this.retryStatusCodes = const [500, 502, 503, 504],
     this.enableRetryOnTimeout = true,
     this.enableRetryOnConnectionError = true,
-  }) : maxRetryCount = maxRetryCount ?? NetworkConfig.instance.maxRetryCount,
+  }) : maxRetryCount = maxRetryCount ?? NetworkConfig.instance.maxRetries,
        retryDelay = retryDelay ?? Duration(milliseconds: NetworkConfig.instance.retryDelay);
   
   @override

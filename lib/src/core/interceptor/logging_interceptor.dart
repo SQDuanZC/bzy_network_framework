@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import '../config/network_config.dart';
+import '../../config/network_config.dart';
 import '../../utils/network_utils.dart';
 import '../../utils/network_logger.dart';
 

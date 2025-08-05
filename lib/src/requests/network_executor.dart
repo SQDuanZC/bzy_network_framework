@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:meta/meta.dart' show unawaited;
 import 'package:synchronized/synchronized.dart';
 import 'base_network_request.dart';
 import '../model/network_response.dart';
 import '../config/network_config.dart';
 import '../core/exception/unified_exception_handler.dart';
-import '../core/interceptor/interceptor_manager.dart';
-import '../core/queue/request_queue_manager.dart';
+import '../core/queue/request_queue_manager.dart' as queue;
+import '../utils/network_logger.dart';
 import 'batch_request.dart';
 
 /// 请求生命周期跟踪器
@@ -58,15 +57,12 @@ class NetworkExecutor {
   
   // 并发安全锁
   final Lock _pendingRequestsLock = Lock();
-  final Lock _queueLock = Lock();
   final Lock _cacheLock = Lock();
-  final Lock _processingLock = Lock();
   
   // 请求队列
   final Map<String, Completer<NetworkResponse<dynamic>>> _pendingRequests = {};
   // 使用RequestQueueManager替代自定义队列实现
-  final RequestQueueManager _queueManager = RequestQueueManager.instance;
-  bool _isProcessingQueue = false;
+  final queue.RequestQueueManager _queueManager = queue.RequestQueueManager.instance;
   
   // 批量请求标记，避免重复处理
   final Set<String> _batchRequestIds = {};
@@ -188,21 +184,31 @@ class NetworkExecutor {
       }
       
       // 直接执行请求，避免拦截器链中的无限递归
-      final response = await _dio.fetch<dynamic>(options);
+      final response = await _dio.request<dynamic>(
+        options.path,
+        data: options.data,
+        queryParameters: options.queryParameters,
+        options: Options(
+          method: options.method,
+          headers: options.headers,
+          sendTimeout: options.sendTimeout,
+          receiveTimeout: options.receiveTimeout,
+        ),
+      );
       
       // 记录响应接收时间
       tracker.onResponseReceived();
-      print('🔍 [DEBUG] 收到响应: ${response.statusCode}');
+      NetworkLogger.executor.fine('收到响应: ${response.statusCode}');
       
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       
       // 解析响应数据
-      print('🔍 [DEBUG] 开始解析响应数据');
+      NetworkLogger.executor.fine('开始解析响应数据');
       final parsedData = request.parseResponse(response.data);
       
       // 记录解析完成时间
       tracker.onParseCompleted();
-      print('🔍 [DEBUG] 响应数据解析完成');
+      NetworkLogger.executor.fine('响应数据解析完成');
       
       final networkResponse = NetworkResponse<T>.success(
         data: parsedData,
@@ -218,7 +224,7 @@ class NetworkExecutor {
       
       // 记录请求完成时间
       tracker.onCompleted();
-      print('🔍 [DEBUG] 请求完成: ${tracker.summary}');
+      NetworkLogger.executor.fine('请求完成: ${tracker.summary}');
       
       request.onRequestComplete(networkResponse);
       if (!isBatch) {
@@ -227,13 +233,13 @@ class NetworkExecutor {
       
       return networkResponse;
     } catch (e) {
-      print('🔍 [DEBUG] 请求执行出错: $e');
+      NetworkLogger.executor.warning('请求执行出错: $e');
       
       // 记录错误信息
       if (tracker.responseReceivedTime != null) {
-        print('🔍 [DEBUG] 错误发生在响应接收后的处理阶段');
+        NetworkLogger.executor.fine('错误发生在响应接收后的处理阶段');
       } else {
-        print('🔍 [DEBUG] 错误发生在请求发送或接收阶段');
+        NetworkLogger.executor.fine('错误发生在请求发送或接收阶段');
       }
       
       final error = e is DioException ? e : DioException(
@@ -242,17 +248,17 @@ class NetworkExecutor {
       );
       
       final networkException = UnifiedExceptionHandler.instance.createNetworkException(error);
-      final customException = request.handleError(error);
+      dynamic customException = request.handleError(error);
       final finalException = customException ?? networkException;
       
       // 如果已经收到响应但在处理过程中出错，尝试恢复
       if (tracker.responseReceivedTime != null && e is! TimeoutException) {
-        print('🔍 [DEBUG] 尝试恢复已接收的响应数据');
+        NetworkLogger.executor.fine('尝试恢复已接收的响应数据');
         try {
           // 尝试再次获取响应
           final recoveryResponse = await _checkResponseStatus<T>(request);
           if (recoveryResponse != null) {
-            print('🔍 [DEBUG] 成功恢复响应数据');
+            NetworkLogger.executor.fine('成功恢复响应数据');
             
             request.onRequestComplete(recoveryResponse);
             if (!isBatch) {
@@ -262,11 +268,11 @@ class NetworkExecutor {
             return recoveryResponse;
           }
         } catch (recoveryError) {
-          print('🔍 [DEBUG] 恢复响应失败: $recoveryError');
+          NetworkLogger.executor.warning('恢复响应失败: $recoveryError');
         }
       }
       
-      request.onRequestError(finalException as NetworkException);
+      request.onRequestError(finalException);
       if (!isBatch) {
         completer.completeError(finalException);
       }
@@ -312,19 +318,31 @@ class NetworkExecutor {
     }
     
     try {
-      // 为批量请求的子请求添加特殊标记
-      final futures = batchRequest.requests.map((req) {
-        // 为子请求添加批量标记，避免重复处理
-        return _executeRequest(req, isBatch: true);
-      }).toList();
-
-      final responses = await Future.wait(futures);
+      // 支持部分成功的批量请求处理
+      final results = <dynamic>[];
+      final errors = <String>[];
       
-      final results = responses.map((res) => res.data).toList();
+      for (final request in batchRequest.requests) {
+        try {
+          final response = await _executeRequest(request, isBatch: true);
+          results.add(response.data);
+        } catch (e) {
+          final errorMsg = '${request.path}: ${e.toString()}';
+          errors.add(errorMsg);
+          results.add(null);
+          NetworkLogger.executor.warning('批量请求中单个请求失败: $errorMsg');
+        }
+      }
+      
+      final successCount = results.where((r) => r != null).length;
+      final hasErrors = errors.isNotEmpty;
+      
       final combinedData = {
         'results': results,
-        'successCount': responses.where((res) => res.success).length,
-        'totalCount': responses.length,
+        'successCount': successCount,
+        'totalCount': batchRequest.requests.length,
+        'errors': errors,
+        'partialSuccess': hasErrors && successCount > 0,
         'batchId': batchId,
       };
 
@@ -333,8 +351,8 @@ class NetworkExecutor {
       
       final response = NetworkResponse.success(
         data: parsedData,
-        statusCode: 200,
-        message: '批量请求成功',
+        statusCode: hasErrors ? 207 : 200, // 207 Multi-Status for partial success
+        message: hasErrors ? '部分请求成功' : '所有请求成功',
       );
       batchRequest.onRequestComplete(response);
       return response;
@@ -376,58 +394,31 @@ class NetworkExecutor {
     return results;
   }
   
-  /// 处理错误
-  void _handleError<T>(
-    dynamic error,
-    BaseNetworkRequest<T> request,
-    Completer<NetworkResponse<dynamic>> completer,
-  ) {
-    print('🔍 [DEBUG] _handleError called with error: $error');
-    final dioError = error is DioException
-        ? error
-        : DioException(requestOptions: request.buildRequestOptions(), error: error);
-
-    final networkException = UnifiedExceptionHandler.instance.createNetworkException(dioError);
-
-    final customException = request.handleError(dioError);
-    final finalException = customException ?? networkException;
-
-    unawaited(UnifiedExceptionHandler.instance.handleException(
-      dioError,
-      context: '网络请求执行',
-      metadata: {
-        'path': request.path,
-        'method': request.method.value,
-        'enableCache': request.enableCache,
-      },
-    ));
-
-    request.onRequestError(finalException as NetworkException);
-    print('🔍 [DEBUG] 完成completer错误处理');
-    completer.completeError(finalException);
-  }
+  // 已移除未使用的_handleError方法
   
   /// 根据优先级入队请求
   Future<NetworkResponse<T>> _enqueueRequest<T>(BaseNetworkRequest<T> request) async {
     final requestKey = _getRequestKey(request);
-    print('🔍 [DEBUG] _enqueueRequest called for ${request.runtimeType} with key: $requestKey');
+    NetworkLogger.executor.fine('_enqueueRequest called for ${request.runtimeType} with key: $requestKey');
+    
+    // 创建请求跟踪器
+    final requestTracker = RequestLifecycleTracker('${request.runtimeType}_$requestKey');
+    
+    // 将请求添加到待处理映射
+    final completer = Completer<NetworkResponse<T>>();
+    await _pendingRequestsLock.synchronized(() {
+      _pendingRequests[requestKey] = completer;
+      NetworkLogger.executor.fine('Added to _pendingRequests, total pending: ${_pendingRequests.length}');
+    });
     
     // 使用RequestQueueManager处理请求入队
     try {
-      // 创建请求跟踪器
-      final requestTracker = RequestLifecycleTracker('${request.runtimeType}_$requestKey');
+      // 将BaseNetworkRequest的优先级转换为RequestQueueManager的优先级
+      final queuePriority = _convertPriority(request.priority);
       
-      // 将请求添加到待处理映射
-      final completer = Completer<NetworkResponse<T>>();
-      await _pendingRequestsLock.synchronized(() {
-        _pendingRequests[requestKey] = completer as Completer<NetworkResponse<dynamic>>;
-        print('🔍 [DEBUG] Added to _pendingRequests, total pending: ${_pendingRequests.length}');
-      });
-      
-      // 使用RequestQueueManager入队请求
       final response = await _queueManager.enqueue<Response>(
         () => _dio.fetch<dynamic>(request.buildRequestOptions()),
-        priority: request.priority,
+        priority: queuePriority,
         requestId: requestKey,
         timeout: const Duration(seconds: 10),
         metadata: {
@@ -437,52 +428,57 @@ class NetworkExecutor {
         },
       );
       
-      // 记录响应接收时间
-      requestTracker.onResponseReceived();
-      print('🔍 [DEBUG] 收到响应: ${response.statusCode}');
-      
-      // 解析响应数据
-      print('🔍 [DEBUG] 开始解析响应数据');
-      final parsedData = request.parseResponse(response.data);
-      
-      // 记录解析完成时间
-      requestTracker.onParseCompleted();
-      print('🔍 [DEBUG] 响应数据解析完成');
-      
-      final networkResponse = NetworkResponse<T>.success(
-        data: parsedData,
-        statusCode: response.statusCode ?? 200,
-        message: response.statusMessage ?? 'Success',
-        headers: response.headers.map,
-        duration: response.requestOptions.extra['duration'] as int? ?? 0,
-      );
-      
-      if (request.enableCache) {
-        _cacheResponse(request, networkResponse);
+      try {
+        // 记录响应接收时间
+        requestTracker.onResponseReceived();
+        NetworkLogger.executor.fine('收到响应: ${response.statusCode}');
+        
+        // 解析响应数据
+        NetworkLogger.executor.fine('开始解析响应数据');
+        final parsedData = request.parseResponse(response.data);
+        
+        // 记录解析完成时间
+        requestTracker.onParseCompleted();
+        NetworkLogger.executor.fine('响应数据解析完成');
+        
+        final networkResponse = NetworkResponse<T>.success(
+          data: parsedData,
+          statusCode: response.statusCode ?? 200,
+          message: response.statusMessage ?? 'Success',
+          headers: response.headers.map,
+          duration: _getDurationSafely(response.requestOptions.extra),
+        );
+        
+        if (request.enableCache) {
+          _cacheResponse(request, networkResponse);
+        }
+        
+        // 记录请求完成时间
+        requestTracker.onCompleted();
+        NetworkLogger.executor.fine('请求完成: ${requestTracker.summary}');
+        
+        request.onRequestComplete(networkResponse);
+        
+        // 从待处理请求中移除
+        await _pendingRequestsLock.synchronized(() {
+          _pendingRequests.remove(requestKey);
+        });
+        
+        return networkResponse;
+      } catch (e) {
+        NetworkLogger.executor.warning('处理响应数据时发生错误: $e');
+        throw e;
       }
-      
-      // 记录请求完成时间
-      requestTracker.onCompleted();
-      print('🔍 [DEBUG] 请求完成: ${requestTracker.summary}');
-      
-      request.onRequestComplete(networkResponse);
-      
-      // 从待处理请求中移除
-      await _pendingRequestsLock.synchronized(() {
-        _pendingRequests.remove(requestKey);
-      });
-      
-      return networkResponse;
     } catch (e) {
-      print('🔍 [DEBUG] 处理请求异常: ${e.toString()}');
+      NetworkLogger.executor.warning('处理请求异常: ${e.toString()}');
       
       // 检查是否已经收到了响应但处理超时
       if (e is TimeoutException || e is DioException && e.type == DioExceptionType.receiveTimeout) {
-        print('🔍 [DEBUG] 处理超时异常');
+        NetworkLogger.executor.fine('处理超时异常');
         
         final response = await _checkResponseStatus<T>(request);
         if (response != null) {
-          print('🔍 [DEBUG] 已找到响应数据，返回成功响应');
+          NetworkLogger.executor.fine('已找到响应数据，返回成功响应');
           return response;
         }
       }
@@ -494,10 +490,10 @@ class NetworkExecutor {
       );
       
       final networkException = UnifiedExceptionHandler.instance.createNetworkException(error);
-      final customException = request.handleError(error);
+      dynamic customException = request.handleError(error);
       final finalException = customException ?? networkException;
       
-      request.onRequestError(finalException as NetworkException);
+      request.onRequestError(finalException);
       
       // 从待处理请求中移除
       await _pendingRequestsLock.synchronized(() {
@@ -604,61 +600,55 @@ class NetworkExecutor {
     }
   }
   
-  /// 处理Dio错误（已弃用，请使用统一异常处理系统）
-  @Deprecated('Use UnifiedExceptionHandler.instance.handleException instead')
-  NetworkException _handleDioError(DioException error) {
-    // Keep this method to ensure backward compatibility
-    switch (error.type) {
-      case DioExceptionType.connectionTimeout:
-        return const NetworkException(
-          message: 'Connection timeout',
-          statusCode: -1,
-          errorCode: 'CONNECTION_TIMEOUT',
-        );
-      case DioExceptionType.sendTimeout:
-        return const NetworkException(
-          message: 'Send timeout',
-          statusCode: -2,
-          errorCode: 'SEND_TIMEOUT',
-        );
-      case DioExceptionType.receiveTimeout:
-        return const NetworkException(
-          message: 'Receive timeout',
-          statusCode: -3,
-          errorCode: 'RECEIVE_TIMEOUT',
-        );
-      case DioExceptionType.badResponse:
-        return NetworkException(
-          message: error.response?.statusMessage ?? 'Bad response',
-          statusCode: error.response?.statusCode,
-          errorCode: 'BAD_RESPONSE',
-          originalError: error,
-        );
-      case DioExceptionType.cancel:
-        return const NetworkException(
-          message: 'Request cancelled',
-          statusCode: -999,
-          errorCode: 'CANCELLED',
-        );
-      case DioExceptionType.connectionError:
-        return const NetworkException(
-          message: 'Connection error',
-          statusCode: -4,
-          errorCode: 'CONNECTION_ERROR',
-        );
-      default:
-        return NetworkException(
-          message: error.message ?? 'Unknown error',
-          statusCode: -5,
-          errorCode: 'UNKNOWN_ERROR',
-          originalError: error,
-        );
-    }
-  }
+  // 已移除未使用的_handleDioError方法
   
   /// 获取请求唯一键
   String _getRequestKey(BaseNetworkRequest request) {
-    return '${request.method}:${request.path}:${request.queryParameters?.toString() ?? ''}';
+    final queryParams = request.queryParameters?.toString() ?? '';
+    final dataHash = request.data?.hashCode.toString() ?? '';
+    final headersHash = request.headers?.hashCode.toString() ?? '';
+    
+    return '${request.method}:${request.path}:$queryParams:$dataHash:$headersHash';
+  }
+  
+  /// 安全获取持续时间
+  int _getDurationSafely(Map<String, dynamic> extra) {
+    final duration = extra['duration'];
+    if (duration is int) {
+      return duration;
+    }
+    return 0;
+  }
+  
+  /// 检查磁盘空间
+  Future<bool> _checkDiskSpace(String path, int requiredSize) async {
+    try {
+      final directory = Directory(path).parent;
+      final stat = await directory.stat();
+      // 简单检查：如果目录存在且可写，假设有足够空间
+      // 在实际应用中，可能需要更复杂的磁盘空间检查
+      return true;
+    } catch (e) {
+      NetworkLogger.executor.warning('磁盘空间检查失败: $e');
+      return false;
+    }
+  }
+  
+  /// 将BaseNetworkRequest的优先级转换为RequestQueueManager的优先级
+  queue.RequestPriority _convertPriority(RequestPriority priority) {
+    // 将BaseNetworkRequest的优先级转换为RequestQueueManager的优先级
+    switch (priority) {
+      case RequestPriority.low:
+        return queue.RequestPriority.low;
+      case RequestPriority.normal:
+        return queue.RequestPriority.normal;
+      case RequestPriority.high:
+        return queue.RequestPriority.high;
+      case RequestPriority.critical:
+        return queue.RequestPriority.critical;
+      default:
+        return queue.RequestPriority.normal;
+    }
   }
   
   /// 重新配置Dio
@@ -674,6 +664,27 @@ class NetworkExecutor {
   /// 移除全局拦截器
   void removeInterceptor(Interceptor interceptor) {
     _dio.interceptors.remove(interceptor);
+  }
+  
+  /// 重新初始化Dio实例（用于配置更新后）
+  void reinitializeDio() {
+    final config = NetworkConfig.instance;
+    
+    // 重新创建Dio实例
+    _dio = Dio(BaseOptions(
+      baseUrl: config.baseUrl,
+      connectTimeout: Duration(milliseconds: config.connectTimeout),
+      receiveTimeout: Duration(milliseconds: config.receiveTimeout),
+      sendTimeout: Duration(milliseconds: config.sendTimeout),
+      headers: Map<String, dynamic>.from(config.defaultHeaders),
+    ));
+    
+    // 重新设置拦截器
+    _setupInterceptors();
+    
+    // 调试信息
+    print('Config baseUrl: "${config.baseUrl}"');
+    print('Dio baseUrl after reinitialize: "${_dio.options.baseUrl}"');
   }
   
   /// 清理资源
@@ -701,17 +712,29 @@ class NetworkExecutor {
       'pendingRequests': _pendingRequests.length,
       'queuedRequests': queueStatus['totalQueued'],
       'executing': queueStatus['executing'],
-      'isProcessingQueue': _isProcessingQueue,
       'cacheSize': _cache.length,
       'batchRequestsCount': _batchRequestIds.length,
       'queueStatistics': queueStatus['statistics'],
     };
   }
   
+  // 状态检查进行中的请求标记
+  final Set<String> _statusCheckInProgress = {};
+  
   /// 检查请求是否已经收到响应但处理超时
   Future<NetworkResponse<T>?> _checkResponseStatus<T>(BaseNetworkRequest<T> request) async {
+    final checkKey = '${request.path}_status_check';
+    
+    // 避免重复检查
+    if (_statusCheckInProgress.contains(checkKey)) {
+      NetworkLogger.executor.fine('请求状态检查已在进行中: ${request.path}');
+      return null;
+    }
+    
+    _statusCheckInProgress.add(checkKey);
+    
     try {
-      print('🔍 [DEBUG] 检查请求状态: ${request.path}');
+      NetworkLogger.executor.fine('检查请求状态: ${request.path}');
       
       // 尝试直接执行一次请求，但不入队
       final options = request.buildRequestOptions();
@@ -723,7 +746,7 @@ class NetworkExecutor {
       );
       
       if (response.statusCode == 200) {
-        print('🔍 [DEBUG] 请求状态检查成功，状态码: ${response.statusCode}');
+        NetworkLogger.executor.fine('请求状态检查成功，状态码: ${response.statusCode}');
         
         // 解析响应数据
         final parsedData = request.parseResponse(response.data);
@@ -735,7 +758,9 @@ class NetworkExecutor {
         );
       }
     } catch (e) {
-      print('🔍 [DEBUG] 请求状态检查失败: $e');
+      NetworkLogger.executor.warning('请求状态检查失败: $e');
+    } finally {
+      _statusCheckInProgress.remove(checkKey);
     }
     
     return null;
@@ -769,6 +794,8 @@ class NetworkExecutor {
         completer.complete(errorResponse);
         return errorResponse;
       }
+      
+
       
       // 构建请求选项
       final options = request.buildRequestOptions();
@@ -827,7 +854,7 @@ class NetworkExecutor {
       final networkException = UnifiedExceptionHandler.instance.createNetworkException(error);
 
       // 尝试使用请求的自定义错误处理
-      NetworkException? customException;
+      dynamic customException;
       if (error is DioException) {
         customException = request.handleError(error);
       }
@@ -845,13 +872,13 @@ class NetworkExecutor {
       ));
 
       final errorResponse = NetworkResponse<T>.error(
-        message: (finalException as NetworkException).message,
-        statusCode: (finalException as NetworkException).statusCode ?? -1,
-        errorCode: (finalException as NetworkException).errorCode,
+        message: finalException.message ?? finalException.toString(),
+        statusCode: finalException.statusCode ?? -1,
+        errorCode: finalException.errorCode,
       );
       
-      request.onDownloadError?.call((finalException as NetworkException).message);
-      request.onRequestError(finalException as NetworkException);
+      request.onDownloadError?.call(finalException.message);
+      request.onRequestError(finalException);
 
       completer.complete(errorResponse);
       return errorResponse;

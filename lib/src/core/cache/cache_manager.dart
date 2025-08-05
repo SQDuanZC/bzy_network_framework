@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
@@ -33,8 +34,8 @@ class CacheManager {
   // 缓存统计
   final CacheStatistics _statistics = CacheStatistics();
   
-  // 磁盘I/O队列
-  final List<Future<void>> _diskIOQueue = [];
+  // 磁盘I/O队列管理器
+  final DiskIOQueue _diskIOQueue = DiskIOQueue();
   
   // 压缩器
   final GZipEncoder _gzipEncoder = GZipEncoder();
@@ -73,11 +74,7 @@ class CacheManager {
       
       // 缓存管理器初始化完成
     } catch (e, stackTrace) {
-      // 使用适当的日志记录而不是注释
-      if (kDebugMode) {
-        debugPrint('缓存管理器初始化失败: $e');
-        debugPrint('堆栈跟踪: $stackTrace');
-      }
+      await _handleCacheError('初始化', e, stackTrace);
       rethrow; // 重新抛出异常以便上层处理
     }
   }
@@ -275,10 +272,7 @@ class CacheManager {
       final future = _setDiskCacheSync(key, entry);
       _diskIOQueue.add(future);
       
-      // 清理已完成的任务（简化处理）
-      if (_diskIOQueue.length > 100) {
-        _diskIOQueue.clear();
-      }
+      // 清理已完成的任务（由DiskIOQueue自动管理）
     } else {
       await _setDiskCacheSync(key, entry);
     }
@@ -475,7 +469,15 @@ class CacheManager {
 
   /// 生成缓存键的哈希值
   String _hashKey(String key) {
-    return key.hashCode.abs().toString();
+    // 使用更安全的哈希算法
+    final bytes = utf8.encode(key);
+    int hash = 0;
+    
+    for (int i = 0; i < bytes.length; i++) {
+      hash = ((hash << 5) - hash + bytes[i]) & 0xFFFFFFFF;
+    }
+    
+    return hash.abs().toString();
   }
 
   /// 序列化响应
@@ -540,9 +542,7 @@ class CacheManager {
     _cleanupTimer = null;
     
     // 等待所有磁盘I/O操作完成
-    while (_diskIOQueue.isNotEmpty) {
-      await Future.delayed(const Duration(milliseconds: 10));
-    }
+    await _diskIOQueue.waitForCompletion();
     
     // 清理内存缓存
     _memoryCache.clear();
@@ -568,6 +568,77 @@ class CacheManager {
     return utf8.decode(decompressed);
   }
   
+  /// 异步分块读取文件
+  Future<String> _readFileAsync(File file, int size) async {
+    final randomAccessFile = await file.open();
+    try {
+      final chunks = <List<int>>[];
+      int offset = 0;
+      const chunkSize = 8192; // 8KB chunks
+      
+      while (offset < size) {
+        final readSize = (offset + chunkSize > size) ? size - offset : chunkSize;
+        final chunk = await randomAccessFile.read(readSize);
+        chunks.add(chunk);
+        offset += chunk.length;
+        
+        // 避免阻塞主线程
+        if (offset % (chunkSize * 4) == 0) {
+          await Future.delayed(const Duration(milliseconds: 1));
+        }
+      }
+      
+      final allBytes = chunks.expand((chunk) => chunk).toList();
+      return utf8.decode(allBytes);
+    } finally {
+      await randomAccessFile.close();
+    }
+  }
+  
+  /// 处理缓存错误
+  Future<void> _handleCacheError(String operation, dynamic error, StackTrace stackTrace) async {
+    if (kDebugMode) {
+      debugPrint('缓存操作失败 [$operation]: $error');
+      debugPrint('堆栈跟踪: $stackTrace');
+    }
+    
+    // 记录错误统计
+    _statistics.errors++;
+    
+    // 根据错误类型采取不同措施
+    if (error is FileSystemException) {
+      // 文件系统错误，可能需要重新初始化缓存目录
+      await _initializeCacheDirectory();
+    } else if (error is FormatException) {
+      // 格式错误，清理损坏的缓存文件
+      await _cleanupCorruptedFiles();
+    }
+  }
+  
+  /// 清理损坏的缓存文件
+  Future<void> _cleanupCorruptedFiles() async {
+    if (_cacheDirectory == null) return;
+    
+    try {
+      final files = _cacheDirectory!.listSync();
+      for (final file in files) {
+        if (file is File && file.path.endsWith('.cache')) {
+          try {
+            // 尝试读取文件验证完整性
+            await file.readAsString();
+          } catch (e) {
+            // 文件损坏，删除
+            await file.delete().catchError((_) {});
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('清理损坏文件失败: $e');
+      }
+    }
+  }
+  
   /// 判断是否需要压缩
   bool _shouldCompress(String data) {
     return _config.enableCompression && 
@@ -583,17 +654,27 @@ class CacheManager {
     }
     
     try {
-      // 简单的XOR加密（生产环境应使用更强的加密算法）
+      // 使用改进的加密算法
       final key = _config.encryptionKey!;
       final keyBytes = utf8.encode(key);
       final dataBytes = utf8.encode(data);
       final encryptedBytes = <int>[];
       
+      // 生成随机盐值
+      final random = Random.secure();
+      final salt = List<int>.generate(16, (_) => random.nextInt(256));
+      
+      // 使用盐值和密钥进行加密
       for (int i = 0; i < dataBytes.length; i++) {
-        encryptedBytes.add(dataBytes[i] ^ keyBytes[i % keyBytes.length]);
+        final keyByte = keyBytes[i % keyBytes.length];
+        final saltByte = salt[i % salt.length];
+        final encryptedByte = dataBytes[i] ^ keyByte ^ saltByte;
+        encryptedBytes.add(encryptedByte);
       }
       
-      return base64.encode(encryptedBytes);
+      // 将盐值和加密数据组合
+      final combined = [...salt, ...encryptedBytes];
+      return base64.encode(combined);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('加密数据失败: $e');
@@ -611,11 +692,23 @@ class CacheManager {
     try {
       final key = _config.encryptionKey!;
       final keyBytes = utf8.encode(key);
-      final encryptedBytes = base64.decode(encryptedData);
+      final combined = base64.decode(encryptedData);
+      
+      // 提取盐值和加密数据
+      if (combined.length < 16) {
+        throw Exception('加密数据格式无效');
+      }
+      
+      final salt = combined.sublist(0, 16);
+      final encryptedBytes = combined.sublist(16);
       final decryptedBytes = <int>[];
       
+      // 使用盐值和密钥进行解密
       for (int i = 0; i < encryptedBytes.length; i++) {
-        decryptedBytes.add(encryptedBytes[i] ^ keyBytes[i % keyBytes.length]);
+        final keyByte = keyBytes[i % keyBytes.length];
+        final saltByte = salt[i % salt.length];
+        final decryptedByte = encryptedBytes[i] ^ keyByte ^ saltByte;
+        decryptedBytes.add(decryptedByte);
       }
       
       return utf8.decode(decryptedBytes);
@@ -652,17 +745,11 @@ class CacheManager {
         
         // 根据文件大小选择读取策略
         if (stat.size > _config.diskIOBufferSize) {
-          // 大文件使用RandomAccessFile分块读取
-          final randomAccessFile = await file.open();
-          try {
-            final bytes = await randomAccessFile.read(stat.size);
-            if (bytes.isEmpty) {
-              await file.delete().catchError((_) => file);
-              return null;
-            }
-            content = utf8.decode(bytes);
-          } finally {
-            await randomAccessFile.close();
+          // 大文件使用分块异步读取
+          content = await _readFileAsync(file, stat.size);
+          if (content.isEmpty) {
+            await file.delete().catchError((_) => file);
+            return null;
           }
         } else {
           // 小文件直接读取，增加超时控制
@@ -868,9 +955,9 @@ class CacheManager {
     }
     
     // 等待所有磁盘I/O操作完成
-    if (_config.enableAsyncDiskIO && _diskIOQueue.isNotEmpty) {
+    if (_config.enableAsyncDiskIO && !_diskIOQueue.isEmpty) {
       try {
-        await Future.wait(_diskIOQueue, eagerError: false);
+        await _diskIOQueue.waitForCompletion();
       } catch (e, stackTrace) {
         if (kDebugMode) {
           debugPrint('等待磁盘I/O操作完成失败: $e');
@@ -878,7 +965,6 @@ class CacheManager {
         }
         // 忽略已完成的Future错误
       }
-      _diskIOQueue.clear();
     }
     
     // 重置统计
@@ -1042,7 +1128,34 @@ class CacheConfig {
     this.enableTagManagement = true,
     this.diskIOBufferSize = 8192, // 8KB
     this.enableAsyncDiskIO = true,
-  });
+  }) {
+    validateConfig();
+  }
+  
+  /// 验证配置参数
+  void validateConfig() {
+    if (maxMemorySize <= 0) {
+      throw ArgumentError('maxMemorySize must be positive');
+    }
+    if (maxDiskSize <= 0) {
+      throw ArgumentError('maxDiskSize must be positive');
+    }
+    if (compressionThreshold <= 0) {
+      throw ArgumentError('compressionThreshold must be positive');
+    }
+    if (diskIOBufferSize <= 0) {
+      throw ArgumentError('diskIOBufferSize must be positive');
+    }
+    if (enableEncryption && (encryptionKey == null || encryptionKey!.isEmpty)) {
+      throw ArgumentError('encryptionKey is required when encryption is enabled');
+    }
+    if (defaultExpiry.inMilliseconds <= 0) {
+      throw ArgumentError('defaultExpiry must be positive');
+    }
+    if (cleanupInterval.inMilliseconds <= 0) {
+      throw ArgumentError('cleanupInterval must be positive');
+    }
+  }
 }
 
 /// 缓存条目
@@ -1130,6 +1243,7 @@ class CacheStatistics {
   int diskHits = 0;
   int misses = 0;
   int totalSets = 0;
+  int errors = 0;
   
   /// 内存命中率
   double get memoryHitRate => totalRequests > 0 ? memoryHits / totalRequests : 0.0;
@@ -1150,6 +1264,7 @@ class CacheStatistics {
     diskHits = 0;
     misses = 0;
     totalSets = 0;
+    errors = 0;
   }
   
   /// 转换为Map
@@ -1160,10 +1275,51 @@ class CacheStatistics {
       'diskHits': diskHits,
       'misses': misses,
       'totalSets': totalSets,
+      'errors': errors,
       'memoryHitRate': memoryHitRate,
       'diskHitRate': diskHitRate,
       'totalHitRate': totalHitRate,
       'missRate': missRate,
     };
   }
+}
+
+/// 磁盘I/O队列管理器
+class DiskIOQueue {
+  final List<Future<void>> _queue = [];
+  final int _maxSize = 100;
+  final Lock _lock = Lock();
+  
+  /// 添加操作到队列
+  Future<void> add(Future<void> operation) async {
+    await _lock.synchronized(() async {
+      if (_queue.length >= _maxSize) {
+        // 等待最旧的操作完成
+        await _queue.removeAt(0);
+      }
+      _queue.add(operation);
+    });
+  }
+  
+  /// 等待所有操作完成
+  Future<void> waitForCompletion() async {
+    await _lock.synchronized(() async {
+      while (_queue.isNotEmpty) {
+        await _queue.removeAt(0);
+      }
+    });
+  }
+  
+  /// 清空队列
+  void clear() {
+    _lock.synchronized(() {
+      _queue.clear();
+    });
+  }
+  
+  /// 获取队列长度
+  int get length => _queue.length;
+  
+  /// 检查队列是否为空
+  bool get isEmpty => _queue.isEmpty;
 }

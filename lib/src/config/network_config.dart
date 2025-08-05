@@ -25,104 +25,128 @@ enum NetworkConfigPreset {
     return null;
   }
   
-  /// Get configuration map for this preset
+  /// Get configuration map for this preset (without baseUrl)
   Map<String, dynamic>? getConfig() {
-    // Forward declaration - will be resolved after NetworkConfig class is defined
+    // Note: baseUrl should be provided separately to avoid hardcoding
     switch (value) {
       case 'development':
         return {
-          'baseUrl': 'https://dev-api.example.com',
-          'connectTimeout': 10000,
-          'receiveTimeout': 20000,
-          'sendTimeout': 15000,
-          'maxRetryCount': 2,
+          'connectTimeout': 15000,
+          'receiveTimeout': 30000,
+          'sendTimeout': 30000,
+          'maxRetries': 3,
+          'retryDelay': 1000,
           'enableLogging': true,
+          'logLevel': LogLevel.debug,
           'enableCache': true,
-          'cacheMaxAge': 300000,
+          'defaultCacheDuration': 300,
+          'maxCacheSize': 100,
+          'environment': Environment.development,
           'enableExponentialBackoff': true,
         };
       case 'production':
         return {
-          'baseUrl': 'https://api.example.com',
           'connectTimeout': 15000,
           'receiveTimeout': 30000,
           'sendTimeout': 30000,
-          'maxRetryCount': 3,
+          'maxRetries': 3,
+          'retryDelay': 1000,
           'enableLogging': false,
+          'logLevel': LogLevel.error,
           'enableCache': true,
-          'cacheMaxAge': 600000,
+          'defaultCacheDuration': 900,
+          'maxCacheSize': 100,
+          'environment': Environment.production,
           'enableExponentialBackoff': true,
         };
       case 'testing':
         return {
-          'baseUrl': 'https://test-api.example.com',
-          'connectTimeout': 5000,
-          'receiveTimeout': 10000,
-          'sendTimeout': 10000,
-          'maxRetryCount': 1,
+          'connectTimeout': 10000,
+          'receiveTimeout': 20000,
+          'sendTimeout': 20000,
+          'maxRetries': 2,
+          'retryDelay': 500,
           'enableLogging': true,
+          'logLevel': LogLevel.info,
           'enableCache': false,
-          'cacheMaxAge': 0,
+          'defaultCacheDuration': 0,
+          'maxCacheSize': 0,
+          'environment': Environment.testing,
           'enableExponentialBackoff': false,
         };
       case 'staging':
         return {
-          'baseUrl': 'https://staging-api.example.com',
-          'connectTimeout': 12000,
-          'receiveTimeout': 25000,
-          'sendTimeout': 25000,
-          'maxRetryCount': 2,
+          'connectTimeout': 15000,
+          'receiveTimeout': 30000,
+          'sendTimeout': 30000,
+          'maxRetries': 3,
+          'retryDelay': 1000,
           'enableLogging': true,
+          'logLevel': LogLevel.warning,
           'enableCache': true,
-          'cacheMaxAge': 450000,
+          'defaultCacheDuration': 600,
+          'maxCacheSize': 100,
+          'environment': Environment.staging,
           'enableExponentialBackoff': true,
         };
       case 'fast_response':
         return {
-          'baseUrl': 'https://api.example.com',
-          'connectTimeout': 3000,
-          'receiveTimeout': 5000,
-          'sendTimeout': 5000,
-          'maxRetryCount': 1,
+          'connectTimeout': 5000,
+          'receiveTimeout': 10000,
+          'sendTimeout': 10000,
+          'maxRetries': 1,
+          'retryDelay': 200,
           'enableLogging': false,
-          'enableCache': true,
-          'cacheMaxAge': 60000,
+          'logLevel': LogLevel.error,
+          'enableCache': false,
+          'defaultCacheDuration': 0,
+          'maxCacheSize': 0,
+          'environment': Environment.development,
           'enableExponentialBackoff': false,
         };
       case 'heavy_load':
         return {
-          'baseUrl': 'https://api.example.com',
           'connectTimeout': 30000,
-          'receiveTimeout': 60000,
-          'sendTimeout': 60000,
-          'maxRetryCount': 5,
+          'receiveTimeout': 120000,
+          'sendTimeout': 120000,
+          'maxRetries': 5,
+          'retryDelay': 2000,
           'enableLogging': true,
-          'enableCache': true,
-          'cacheMaxAge': 1200000,
+          'logLevel': LogLevel.info,
+          'enableCache': false,
+          'defaultCacheDuration': 0,
+          'maxCacheSize': 0,
+          'environment': Environment.production,
           'enableExponentialBackoff': true,
         };
       case 'offline_first':
         return {
-          'baseUrl': 'https://api.example.com',
-          'connectTimeout': 5000,
-          'receiveTimeout': 10000,
-          'sendTimeout': 10000,
-          'maxRetryCount': 0,
+          'connectTimeout': 15000,
+          'receiveTimeout': 30000,
+          'sendTimeout': 30000,
+          'maxRetries': 3,
+          'retryDelay': 1000,
           'enableLogging': true,
+          'logLevel': LogLevel.info,
           'enableCache': true,
-          'cacheMaxAge': 86400000,
-          'enableExponentialBackoff': false,
+          'defaultCacheDuration': 3600,
+          'maxCacheSize': 500,
+          'environment': Environment.development,
+          'enableExponentialBackoff': true,
         };
       case 'low_bandwidth':
         return {
-          'baseUrl': 'https://api.example.com',
           'connectTimeout': 20000,
-          'receiveTimeout': 45000,
-          'sendTimeout': 45000,
-          'maxRetryCount': 3,
-          'enableLogging': false,
+          'receiveTimeout': 60000,
+          'sendTimeout': 60000,
+          'maxRetries': 5,
+          'retryDelay': 3000,
+          'enableLogging': true,
+          'logLevel': LogLevel.warning,
           'enableCache': true,
-          'cacheMaxAge': 1800000,
+          'defaultCacheDuration': 1800,
+          'maxCacheSize': 100,
+          'environment': Environment.production,
           'enableExponentialBackoff': true,
         };
       default:
@@ -251,7 +275,7 @@ class NetworkConfig {
   
   /// Initialize from preset configuration
   void initializeFromPreset(String presetName, {String? baseUrl}) {
-    final preset = NetworkConfigPresets.getPreset(presetName);
+    final preset = NetworkConfigPresets.getUnifiedPreset(presetName);
     if (preset == null) {
       throw ArgumentError('Unknown preset: $presetName');
     }
@@ -271,6 +295,9 @@ class NetworkConfig {
       environment: preset['environment'],
       enableExponentialBackoff: preset['enableExponentialBackoff'],
     );
+    
+    // Validate configuration after initialization
+    validateConfig();
   }
   
   /// Update base URL
@@ -336,6 +363,31 @@ class NetworkConfig {
   }) {
     if (enableLogging != null) _enableLogging = enableLogging;
     if (logLevel != null) _logLevel = logLevel;
+  }
+  
+  /// Validate configuration values
+  void validateConfig() {
+    if (_connectTimeout <= 0) {
+      throw ArgumentError('connectTimeout must be positive');
+    }
+    if (_receiveTimeout <= 0) {
+      throw ArgumentError('receiveTimeout must be positive');
+    }
+    if (_sendTimeout <= 0) {
+      throw ArgumentError('sendTimeout must be positive');
+    }
+    if (_maxRetries < 0) {
+      throw ArgumentError('maxRetries must be non-negative');
+    }
+    if (_retryDelay < 0) {
+      throw ArgumentError('retryDelay must be non-negative');
+    }
+    if (_defaultCacheDuration < 0) {
+      throw ArgumentError('defaultCacheDuration must be non-negative');
+    }
+    if (_maxCacheSize < 0) {
+      throw ArgumentError('maxCacheSize must be non-negative');
+    }
   }
   
   /// Set environment
@@ -408,7 +460,7 @@ class NetworkConfig {
         'baseUrl: $_baseUrl, '
         'environment: ${_environment.name}, '
         'enableLogging: $_enableLogging, '
-        'enableCache: $_enableCache'
+        'enableCache: $_enableCache,'
         '}';
   }
 }
@@ -504,6 +556,7 @@ class NetworkConfigPresets {
     'logLevel': LogLevel.error,
     'enableCache': false,
     'defaultCacheDuration': 0,
+    'environment': Environment.development,
     'enableExponentialBackoff': false,
   };
   
@@ -518,6 +571,7 @@ class NetworkConfigPresets {
     'logLevel': LogLevel.info,
     'enableCache': false,
     'defaultCacheDuration': 0,
+    'environment': Environment.production,
     'enableExponentialBackoff': true,
   };
   
@@ -533,6 +587,7 @@ class NetworkConfigPresets {
     'enableCache': true,
     'defaultCacheDuration': 3600, // 1 hour
     'maxCacheSize': 500, // 500MB
+    'environment': Environment.development,
     'enableExponentialBackoff': true,
   };
   
@@ -547,6 +602,7 @@ class NetworkConfigPresets {
     'logLevel': LogLevel.warning,
     'enableCache': true,
     'defaultCacheDuration': 1800, // 30 minutes
+    'environment': Environment.production,
     'enableExponentialBackoff': true,
   };
   
@@ -591,5 +647,22 @@ class NetworkConfigPresets {
   /// Get all available presets as enum values
   static List<NetworkConfigPreset> getAvailablePresetEnums() {
     return NetworkConfigPreset.values;
+  }
+  
+  /// Get unified configuration format
+  static Map<String, dynamic>? getUnifiedPreset(String presetName) {
+    // Try to get from NetworkConfigPresets first
+    final preset = getPreset(presetName);
+    if (preset != null) {
+      return preset;
+    }
+    
+    // Try to get from NetworkConfigPreset enum
+    final enumPreset = NetworkConfigPreset.fromString(presetName);
+    if (enumPreset != null) {
+      return enumPreset.getConfig();
+    }
+    
+    return null;
   }
 }

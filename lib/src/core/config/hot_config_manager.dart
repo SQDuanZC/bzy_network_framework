@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'network_config.dart';
+import '../../config/network_config.dart';
 
 /// 热更新配置管理器
 /// 支持动态配置更新、配置监听、配置验证等功能
@@ -190,12 +190,12 @@ class HotConfigManager {
       final networkConfig = NetworkConfig.instance;
       
       // 应用网络配置
-      networkConfig.configure(
+      networkConfig.initialize(
         baseUrl: config['baseUrl'],
         connectTimeout: config['connectTimeout'],
         receiveTimeout: config['receiveTimeout'],
         sendTimeout: config['sendTimeout'],
-        maxRetryCount: config['maxRetryCount'],
+        maxRetries: config['maxRetryCount'],
         retryDelay: config['retryDelay'],
         enableLogging: config['enableLogging'],
         environment: _parseEnvironment(config['environment']),
@@ -231,7 +231,7 @@ class HotConfigManager {
       'connectTimeout': config.connectTimeout,
       'receiveTimeout': config.receiveTimeout,
       'sendTimeout': config.sendTimeout,
-      'maxRetryCount': config.maxRetryCount,
+      'maxRetryCount': config.maxRetries,
       'retryDelay': config.retryDelay,
       'enableLogging': config.enableLogging,
       'environment': config.environment.toString(),

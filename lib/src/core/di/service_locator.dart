@@ -1,5 +1,5 @@
 import '../cache/cache_manager.dart';
-import '../config/network_config.dart';
+import '../../config/network_config.dart';
 import '../interceptor/interceptor_manager.dart';
 import '../interceptor/logging_interceptor.dart' as logging;
 import '../queue/request_queue_manager.dart';
@@ -183,6 +183,12 @@ class ServiceLocator {
     ServiceDisposer<T>? disposer,
     List<Type> dependencies = const [],
   }) {
+    // 空值检查
+    if (factory == null) {
+      NetworkLogger.general.warning('服务注册: factory 为空');
+      throw ArgumentError('factory cannot be null');
+    }
+    
     if (_services.containsKey(T)) {
       throw ServiceAlreadyRegisteredException('Service $T is already registered');
     }
@@ -197,6 +203,12 @@ class ServiceLocator {
   
   /// Get service instance
   T get<T>() {
+    // 空值检查
+    if (T == null) {
+      NetworkLogger.general.warning('获取服务: 服务类型为空');
+      throw ArgumentError('Service type cannot be null');
+    }
+    
     final registration = _getRegistration<T>();
     if (registration == null) {
       throw ServiceNotRegisteredException('Service $T is not registered');
@@ -240,16 +252,41 @@ class ServiceLocator {
     
     final registration = _getRegistration<T>();
     if (registration != null) {
-      for (final _ in registration.dependencies) {
-        _checkCircularDependency<dynamic>(visited);
+      for (final dependency in registration.dependencies) {
+        // 改进：使用具体的依赖类型而不是dynamic
+        _checkCircularDependencyForType(dependency, visited);
       }
     }
     
     visited.remove(T);
   }
   
+  /// Check circular dependency for specific type
+  void _checkCircularDependencyForType(Type type, Set<Type> visited) {
+    if (visited.contains(type)) {
+      throw CircularDependencyException('Circular dependency detected for $type');
+    }
+    
+    visited.add(type);
+    
+    final registration = _services[type];
+    if (registration != null) {
+      for (final dependency in registration.dependencies) {
+        _checkCircularDependencyForType(dependency, visited);
+      }
+    }
+    
+    visited.remove(type);
+  }
+  
   /// Create scope
   ServiceScope createScope(String name) {
+    // 空值检查
+    if (name == null || name.isEmpty) {
+      NetworkLogger.general.warning('创建作用域: name 为空');
+      throw ArgumentError('Scope name cannot be null or empty');
+    }
+    
     if (_scopes.containsKey(name)) {
       throw ScopeAlreadyExistsException('Scope $name already exists');
     }
@@ -266,6 +303,12 @@ class ServiceLocator {
   
   /// Dispose scope
   void disposeScope(String name) {
+    // 空值检查
+    if (name == null || name.isEmpty) {
+      NetworkLogger.general.warning('销毁作用域: name 为空');
+      throw ArgumentError('Scope name cannot be null or empty');
+    }
+    
     final scope = _scopes.remove(name);
     scope?.dispose();
   }

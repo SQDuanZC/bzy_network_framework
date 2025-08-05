@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../../utils/network_logger.dart';
 
 /// 插件化拦截器管理器
 /// 支持拦截器的动态注册、管理、执行顺序控制
@@ -52,9 +53,7 @@ class InterceptorManager {
       _executionOrder.add(name);
     }
     
-    if (kDebugMode) {
-      debugPrint('拦截器已注册: $name');
-    }
+    NetworkLogger.interceptor.info('拦截器已注册: $name');
   }
   
   /// 注销拦截器
@@ -67,9 +66,7 @@ class InterceptorManager {
     _configs.remove(name);
     _executionOrder.remove(name);
     
-    if (kDebugMode) {
-      debugPrint('拦截器已注销: $name');
-    }
+    NetworkLogger.interceptor.info('拦截器已注销: $name');
     return true;
   }
   
@@ -78,9 +75,7 @@ class InterceptorManager {
     final config = _configs[name];
     if (config != null) {
       config.enabled = true;
-      if (kDebugMode) {
-        debugPrint('拦截器已启用: $name');
-      }
+          NetworkLogger.interceptor.info('拦截器已启用: $name');
       return true;
     }
     return false;
@@ -91,9 +86,7 @@ class InterceptorManager {
     final config = _configs[name];
     if (config != null) {
       config.enabled = false;
-      if (kDebugMode) {
-        debugPrint('拦截器已禁用: $name');
-      }
+          NetworkLogger.interceptor.info('拦截器已禁用: $name');
       return true;
     }
     return false;
@@ -136,6 +129,16 @@ class InterceptorManager {
   
   /// 执行请求拦截
   void interceptRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    // 空值检查
+    if (options == null) {
+      NetworkLogger.interceptor.warning('请求拦截: RequestOptions 为空');
+      return;
+    }
+    if (handler == null) {
+      NetworkLogger.interceptor.warning('请求拦截: RequestInterceptorHandler 为空');
+      return;
+    }
+    
     _executeRequestChain(0, options, handler);
   }
 
@@ -180,14 +183,10 @@ class InterceptorManager {
         final duration = DateTime.now().difference(startTime);
         _statistics.recordExecution(name, InterceptorType.request, duration, false);
         if (config.continueOnError) {
-          if (kDebugMode) {
-            debugPrint('请求拦截器 "$name" 执行超时，继续执行');
-          }
+          NetworkLogger.interceptor.warning('请求拦截器 "$name" 执行超时，继续执行');
           _executeRequestChain(index + 1, options, handler);
         } else {
-          if (kDebugMode) {
-            debugPrint('请求拦截器 "$name" 执行超时，中断执行');
-          }
+          NetworkLogger.interceptor.warning('请求拦截器 "$name" 执行超时，中断执行');
           handler.reject(DioException(
             requestOptions: options,
             error: TimeoutException('拦截器执行超时', config.timeout),
@@ -199,14 +198,10 @@ class InterceptorManager {
         final duration = DateTime.now().difference(startTime);
         _statistics.recordExecution(name, InterceptorType.request, duration, false);
         if (config.continueOnError) {
-          if (kDebugMode) {
-            debugPrint('请求拦截器 "$name" 执行失败，继续执行: $e');
-          }
+          NetworkLogger.interceptor.warning('请求拦截器 "$name" 执行失败，继续执行: $e');
           _executeRequestChain(index + 1, options, handler);
         } else {
-          if (kDebugMode) {
-            debugPrint('请求拦截器 "$name" 执行失败，中断执行: $e');
-          }
+          NetworkLogger.interceptor.warning('请求拦截器 "$name" 执行失败，中断执行: $e');
           handler.reject(e is DioException ? e : DioException(requestOptions: options, error: e));
         }
       },
@@ -215,6 +210,16 @@ class InterceptorManager {
   
   /// 执行响应拦截
   void interceptResponse(Response response, ResponseInterceptorHandler handler) {
+    // 空值检查
+    if (response == null) {
+      NetworkLogger.interceptor.warning('响应拦截: Response 为空');
+      return;
+    }
+    if (handler == null) {
+      NetworkLogger.interceptor.warning('响应拦截: ResponseInterceptorHandler 为空');
+      return;
+    }
+    
     _executeResponseChain(_executionOrder.length - 1, response, handler);
   }
 
@@ -258,14 +263,10 @@ class InterceptorManager {
         final duration = DateTime.now().difference(startTime);
         _statistics.recordExecution(name, InterceptorType.response, duration, false);
         if (config.continueOnError) {
-          if (kDebugMode) {
-            debugPrint('响应拦截器 "$name" 执行超时，继续执行');
-          }
+          NetworkLogger.interceptor.warning('响应拦截器 "$name" 执行超时，继续执行');
           _executeResponseChain(index - 1, response, handler);
         } else {
-          if (kDebugMode) {
-            debugPrint('响应拦截器 "$name" 执行超时，中断执行');
-          }
+          NetworkLogger.interceptor.warning('响应拦截器 "$name" 执行超时，中断执行');
           handler.reject(DioException(
             requestOptions: response.requestOptions,
             error: TimeoutException('拦截器执行超时', config.timeout),
@@ -277,14 +278,10 @@ class InterceptorManager {
         final duration = DateTime.now().difference(startTime);
         _statistics.recordExecution(name, InterceptorType.response, duration, false);
         if (config.continueOnError) {
-          if (kDebugMode) {
-            debugPrint('响应拦截器 "$name" 执行失败，继续执行: $e');
-          }
+          NetworkLogger.interceptor.warning('响应拦截器 "$name" 执行失败，继续执行: $e');
           _executeResponseChain(index - 1, response, handler);
         } else {
-          if (kDebugMode) {
-            debugPrint('响应拦截器 "$name" 执行失败，中断执行: $e');
-          }
+          NetworkLogger.interceptor.warning('响应拦截器 "$name" 执行失败，中断执行: $e');
           handler.reject(e is DioException ? e : DioException(requestOptions: response.requestOptions, error: e));
         }
       },
@@ -293,6 +290,16 @@ class InterceptorManager {
   
   /// 执行错误拦截
   void interceptError(DioException err, ErrorInterceptorHandler handler) {
+    // 空值检查
+    if (err == null) {
+      NetworkLogger.interceptor.warning('错误拦截: DioException 为空');
+      return;
+    }
+    if (handler == null) {
+      NetworkLogger.interceptor.warning('错误拦截: ErrorInterceptorHandler 为空');
+      return;
+    }
+    
     _executeErrorChain(0, err, handler);
   }
 
@@ -336,14 +343,10 @@ class InterceptorManager {
         final duration = DateTime.now().difference(startTime);
         _statistics.recordExecution(name, InterceptorType.error, duration, false);
         if (config.continueOnError) {
-          if (kDebugMode) {
-            debugPrint('错误拦截器 "$name" 执行超时，继续执行');
-          }
+          NetworkLogger.interceptor.warning('错误拦截器 "$name" 执行超时，继续执行');
           _executeErrorChain(index + 1, err, handler);
         } else {
-          if (kDebugMode) {
-            debugPrint('错误拦截器 "$name" 执行超时，中断执行');
-          }
+          NetworkLogger.interceptor.warning('错误拦截器 "$name" 执行超时，中断执行');
           handler.reject(DioException(
             requestOptions: err.requestOptions,
             error: TimeoutException('拦截器执行超时', config.timeout),
@@ -355,14 +358,10 @@ class InterceptorManager {
         final duration = DateTime.now().difference(startTime);
         _statistics.recordExecution(name, InterceptorType.error, duration, false);
         if (config.continueOnError) {
-          if (kDebugMode) {
-            debugPrint('错误拦截器 "$name" 执行失败，继续执行: $e');
-          }
+          NetworkLogger.interceptor.warning('错误拦截器 "$name" 执行失败，继续执行: $e');
           _executeErrorChain(index + 1, err, handler);
         } else {
-          if (kDebugMode) {
-            debugPrint('错误拦截器 "$name" 执行失败，中断执行: $e');
-          }
+          NetworkLogger.interceptor.warning('错误拦截器 "$name" 执行失败，中断执行: $e');
           handler.reject(e is DioException ? e : DioException(requestOptions: err.requestOptions, error: e));
         }
       },
@@ -441,6 +440,7 @@ class InterceptorManager {
     timeoutTimer = Timer(timeout, () {
       if (!completed) {
         completed = true;
+        timeoutTimer?.cancel(); // 确保Timer被清理
         onTimeout();
       }
     });
@@ -726,9 +726,7 @@ class CacheInterceptor extends PluginInterceptor {
     RequestInterceptorHandler handler,
   ) async {
     // 检查缓存逻辑
-    if (kDebugMode) {
-      debugPrint('缓存拦截器: 检查请求缓存');
-    }
+    NetworkLogger.interceptor.fine('缓存拦截器: 检查请求缓存');
     return options;
   }
   
@@ -738,9 +736,7 @@ class CacheInterceptor extends PluginInterceptor {
     ResponseInterceptorHandler handler,
   ) async {
     // 保存缓存逻辑
-    if (kDebugMode) {
-      debugPrint('缓存拦截器: 保存响应缓存');
-    }
+    NetworkLogger.interceptor.fine('缓存拦截器: 保存响应缓存');
     return response;
   }
 }
@@ -768,9 +764,7 @@ class AuthInterceptor extends PluginInterceptor {
     RequestInterceptorHandler handler,
   ) async {
     // 添加认证头
-    if (kDebugMode) {
-      debugPrint('认证拦截器: 添加认证信息');
-    }
+    NetworkLogger.interceptor.fine('认证拦截器: 添加认证信息');
     return options;
   }
   
@@ -780,9 +774,7 @@ class AuthInterceptor extends PluginInterceptor {
     ErrorInterceptorHandler handler,
   ) async {
     // 处理认证错误
-    if (kDebugMode) {
-      debugPrint('认证拦截器: 处理认证错误');
-    }
+    NetworkLogger.interceptor.fine('认证拦截器: 处理认证错误');
   }
 }
 
@@ -811,9 +803,7 @@ class LoggingInterceptor extends PluginInterceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    if (kDebugMode) {
-      debugPrint('日志拦截器: 记录请求 ${options.method} ${options.uri}');
-    }
+    NetworkLogger.interceptor.info('日志拦截器: 记录请求 ${options.method} ${options.uri}');
     return options;
   }
   
@@ -822,9 +812,7 @@ class LoggingInterceptor extends PluginInterceptor {
     Response response,
     ResponseInterceptorHandler handler,
   ) async {
-    if (kDebugMode) {
-      debugPrint('日志拦截器: 记录响应 ${response.statusCode}');
-    }
+    NetworkLogger.interceptor.info('日志拦截器: 记录响应 ${response.statusCode}');
     return response;
   }
   
@@ -833,9 +821,7 @@ class LoggingInterceptor extends PluginInterceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    if (kDebugMode) {
-      debugPrint('日志拦截器: 记录错误 ${err.message}');
-    }
+    NetworkLogger.interceptor.warning('日志拦截器: 记录错误 ${err.message}');
   }
 }
 
@@ -871,9 +857,7 @@ class RetryInterceptor extends PluginInterceptor {
     ErrorInterceptorHandler handler,
   ) async {
     // 重试逻辑
-    if (kDebugMode) {
-      debugPrint('重试拦截器: 处理重试');
-    }
+    NetworkLogger.interceptor.fine('重试拦截器: 处理重试');
   }
 }
 

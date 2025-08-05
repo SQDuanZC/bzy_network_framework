@@ -5,11 +5,19 @@ English | [中文](README.md)
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.4-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.5-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY Network Framework** is a high-performance, easily extensible Flutter network request solution that provides comprehensive network requests, caching, interceptors, monitoring, and other features.
 
-## 🆕 Latest Updates (v1.0.4)
+## 🆕 Latest Updates (v1.0.5)
+
+- 📊 **Performance Metrics Module**: Added comprehensive performance metrics monitoring system with real-time visualization
+- 🔧 **Configuration Optimization**: Fixed configuration inconsistencies between NetworkConfigPreset and NetworkConfigPresets
+- 📝 **Documentation Enhancement**: Added detailed documentation for metrics monitoring module with usage examples
+- 🎯 **Widget Integration**: Provided NetworkMetricsWidget for easy integration into Flutter applications
+- 🔄 **Unified Configuration**: Standardized configuration format and added missing fields
+
+### v1.0.4 Updates
 
 - 🛠️ **Error Handling Enhancement**: Added unified error handling mechanism with custom error handling for different HTTP status codes
 - 🔄 **Request Lifecycle Tracking**: Implemented RequestLifecycleTracker to monitor request stages (sending, receiving, parsing, completion)

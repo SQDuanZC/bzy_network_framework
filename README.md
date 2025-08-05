@@ -5,11 +5,19 @@
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.4-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.5-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY 网络框架** 是一个高性能、易扩展的 Flutter 网络请求解决方案，提供完整的网络请求、缓存、拦截器、监控等功能。
 
-## 🆕 最新更新 (v1.0.4)
+## 🆕 最新更新 (v1.0.5)
+
+- 📊 **性能指标监控模块**: 新增完整的性能指标监控系统，支持实时可视化
+- 🔧 **配置优化**: 修复了 NetworkConfigPreset 和 NetworkConfigPresets 配置不一致问题
+- 📝 **文档完善**: 新增指标监控模块详细文档和使用示例
+- 🎯 **组件集成**: 提供 NetworkMetricsWidget 便于集成到 Flutter 应用中
+- 🔄 **配置统一**: 标准化配置格式，添加缺失字段
+
+### v1.0.4 更新
 
 - 🛠️ **错误处理增强**: 添加统一错误处理机制，支持针对不同HTTP状态码的自定义错误处理
 - 🔄 **请求生命周期跟踪**: 实现RequestLifecycleTracker，监控请求各个阶段（发送、接收、解析、完成）

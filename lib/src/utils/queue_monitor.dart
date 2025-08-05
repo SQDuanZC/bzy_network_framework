@@ -61,10 +61,10 @@ class QueueMonitor {
     
     final metrics = QueueMetrics(
       timestamp: timestamp,
-      pendingRequests: status['pendingRequests'] as int,
-      queuedRequests: status['queuedRequests'] as int,
-      isProcessingQueue: status['isProcessingQueue'] as bool,
-      cacheSize: status['cacheSize'] as int,
+      pendingRequests: status['pendingRequests'] as int? ?? 0,
+      queuedRequests: status['queuedRequests'] as int? ?? 0,
+      isProcessingQueue: status['isProcessingQueue'] as bool? ?? false,
+      cacheSize: status['cacheSize'] as int? ?? 0,
     );
     
     // 添加到历史记录

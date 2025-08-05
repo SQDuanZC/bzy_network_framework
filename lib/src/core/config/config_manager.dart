@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'environment.dart' as env;
-import 'network_config.dart';
+import '../../config/network_config.dart';
 import 'environment_config.dart';
+import '../../utils/network_logger.dart';
 
 /// 配置管理器
 /// 支持多环境配置、动态配置切换、配置验证
@@ -165,15 +167,15 @@ class ConfigManager {
   /// 应用配置（对象方式）
   Future<void> _applyConfigObject(EnvironmentConfig config) async {
     // 更新全局网络配置
-    NetworkConfig.instance.configure(
+    NetworkConfig.instance.initialize(
       baseUrl: config.baseUrl,
       connectTimeout: config.connectTimeout,
       receiveTimeout: config.receiveTimeout,
       sendTimeout: config.sendTimeout,
-      maxRetryCount: config.maxRetryCount,
+      maxRetries: config.maxRetryCount,
       enableLogging: config.enableLogging,
       enableCache: config.enableCache,
-      cacheMaxAge: config.cacheMaxAge,
+      defaultCacheDuration: config.cacheMaxAge,
       enableExponentialBackoff: config.enableExponentialBackoff,
       environment: _convertEnvironment(_currentEnvironment),
     );
@@ -279,23 +281,49 @@ class ConfigManager {
   }
   
   /// 从远程加载配置
-  Future<void> loadRemoteConfig(String url, {Duration? timeout}) async {
+  Future<void> loadRemoteConfig(
+    String url, {
+    Duration? timeout,
+    Map<String, String>? headers,
+    String? apiKey,
+  }) async {
     try {
       final dio = Dio();
+      
+      // 添加安全头
+      final requestHeaders = <String, String>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...?headers,
+      };
+      
+      // 添加API密钥（如果提供）
+      if (apiKey != null && apiKey.isNotEmpty) {
+        requestHeaders['Authorization'] = 'Bearer $apiKey';
+      }
+      
       final response = await dio.get(
         url,
         options: Options(
+          headers: requestHeaders,
           receiveTimeout: timeout ?? const Duration(seconds: 10),
+          validateStatus: (status) => status != null && status >= 200 && status < 300,
         ),
       );
       
       if (response.statusCode == 200) {
         final remoteConfig = response.data as Map<String, dynamic>;
+        
+        // 验证配置完整性
+        if (!_validateRemoteConfigIntegrity(remoteConfig)) {
+          throw ArgumentError('远程配置完整性验证失败');
+        }
+        
         await _processRemoteConfig(remoteConfig);
-        // 远程配置加载成功
+        NetworkLogger.executor.info('远程配置加载成功: $url');
       }
     } catch (e) {
-      // 远程配置加载失败: $e
+      NetworkLogger.executor.warning('远程配置加载失败: $e');
       rethrow;
     }
   }
@@ -337,6 +365,44 @@ class ConfigManager {
       if (environments is! Map<String, dynamic>) {
         return false;
       }
+    }
+    
+    return true;
+  }
+  
+  /// 验证远程配置完整性
+  bool _validateRemoteConfigIntegrity(Map<String, dynamic> config) {
+    // 基本格式验证
+    if (!_validateRemoteConfig(config)) {
+      return false;
+    }
+    
+    // 验证必需字段
+    if (!config.containsKey('version')) {
+      NetworkLogger.executor.warning('远程配置缺少版本信息');
+      return false;
+    }
+    
+    // 验证时间戳（如果存在）
+    if (config.containsKey('timestamp')) {
+      final timestamp = config['timestamp'];
+      if (timestamp is int) {
+        final configTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        final now = DateTime.now();
+        final diff = now.difference(configTime).abs();
+        
+        // 配置不能太旧（超过24小时）
+        if (diff.inHours > 24) {
+          NetworkLogger.executor.warning('远程配置时间戳过旧: ${diff.inHours}小时前');
+          return false;
+        }
+      }
+    }
+    
+    // 验证签名（如果存在）
+    if (config.containsKey('signature')) {
+      // 这里可以添加数字签名验证逻辑
+      // 目前只是检查签名字段存在
     }
     
     return true;

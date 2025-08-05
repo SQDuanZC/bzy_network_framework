@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 import 'interceptor_manager.dart';
-import '../config/network_config.dart';
+import '../../config/network_config.dart';
 import '../network/network_adapter.dart';
 import '../network/network_connectivity_monitor.dart';
 

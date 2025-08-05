@@ -81,8 +81,8 @@ abstract class BaseNetworkRequest<T> {
   /// Response data parsing
   T parseResponse(dynamic data);
   
-  /// Error handling (returns compatible NetworkException)
-  NetworkException? handleError(DioException error) => null;
+  /// Error handling (returns compatible exception)
+  dynamic handleError(DioException error) => null;
   
   /// Pre-request processing
   void onRequestStart() {}
@@ -91,7 +91,7 @@ abstract class BaseNetworkRequest<T> {
   void onRequestComplete(NetworkResponse<T> response) {}
   
   /// Request failure processing
-  void onRequestError(NetworkException error) {}
+  void onRequestError(dynamic error) {}
   
   /// Get complete request options with automatic data conversion
   RequestOptions buildRequestOptions() {

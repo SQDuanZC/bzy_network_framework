@@ -3,7 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:synchronized/synchronized.dart';
-
+import '../../utils/network_logger.dart';
 
 /// 请求队列管理器
 /// 支持请求队列、并发控制、优先级调度、请求去重
@@ -19,10 +19,13 @@ class RequestQueueManager {
   final Lock _duplicateLock = Lock(); // 去重映射锁
   final Lock _statisticsLock = Lock(); // 统计信息锁
   
-  // 使用优先级队列数据结构
-  final PriorityQueue<QueuedRequest> _priorityQueue = PriorityQueue<QueuedRequest>(
-    (a, b) => a.priority.index.compareTo(b.priority.index)
-  );
+  // 按优先级分组的队列
+  final Map<RequestPriority, Queue<QueuedRequest>> _queues = {
+    RequestPriority.critical: Queue<QueuedRequest>(),
+    RequestPriority.high: Queue<QueuedRequest>(),
+    RequestPriority.normal: Queue<QueuedRequest>(),
+    RequestPriority.low: Queue<QueuedRequest>(),
+  };
   
   // 正在执行的请求
   final Set<String> _executingRequests = {};
@@ -32,6 +35,7 @@ class RequestQueueManager {
   
   // 队列处理定时器
   Timer? _processingTimer;
+  Timer? _timeoutMonitoringTimer;
   
   // 队列统计
   final QueueStatistics _statistics = QueueStatistics();
@@ -66,6 +70,11 @@ class RequestQueueManager {
     bool enableDeduplication = true,
     Map<String, dynamic>? metadata,
   }) async {
+    // 空值检查
+    if (requestFunction == null) {
+      NetworkLogger.queue.warning('入队请求: requestFunction 为空');
+      throw ArgumentError('requestFunction cannot be null');
+    }
     final effectiveRequestId = requestId ?? _generateRequestId();
     final completer = Completer<T>();
     
@@ -132,7 +141,7 @@ class RequestQueueManager {
     
     // 检查队列大小限制 - 使用队列状态锁
     await _queueStateLock.synchronized(() async {
-      final totalQueueSize = _priorityQueue.length;
+      final totalQueueSize = _queues.values.fold(0, (sum, queue) => sum + queue.length);
       if (totalQueueSize >= _config.maxQueueSize) {
         // 队列已满，根据溢出策略处理
         final handled = await _handleQueueOverflow(queuedRequest);
@@ -155,7 +164,7 @@ class RequestQueueManager {
       }
       
       // 添加到优先级队列
-      _priorityQueue.add(queuedRequest);
+      _queues[priority]!.add(queuedRequest);
       
       await _statisticsLock.synchronized(() {
         _statistics.totalEnqueued++;
@@ -171,7 +180,7 @@ class RequestQueueManager {
   
   /// 取消请求
   Future<bool> cancelRequest(String requestId) async {
-    return await _queueLock.synchronized(() {
+    return await _queueStateLock.synchronized(() {
       // 从队列中移除
       for (final queue in _queues.values) {
         final request = queue.cast<QueuedRequest?>().firstWhere(
@@ -204,7 +213,7 @@ class RequestQueueManager {
   
   /// 清空队列
   void clearQueue({RequestPriority? priority}) {
-    _queueLock.synchronized(() {
+    _queueStateLock.synchronized(() {
       if (priority != null) {
         final queue = _queues[priority]!;
         while (queue.isNotEmpty) {
@@ -243,6 +252,8 @@ class RequestQueueManager {
   void pauseQueue() {
     _processingTimer?.cancel();
     _processingTimer = null;
+    _timeoutMonitoringTimer?.cancel();
+    _timeoutMonitoringTimer = null;
   }
   
   /// 恢复队列处理
@@ -265,7 +276,8 @@ class RequestQueueManager {
   
   /// 开始队列超时监控
   void _startQueueTimeoutMonitoring() {
-    Timer.periodic(const Duration(seconds: 30), (timer) {
+    _timeoutMonitoringTimer?.cancel();
+    _timeoutMonitoringTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _checkQueueTimeout();
     });
   }
@@ -279,20 +291,22 @@ class RequestQueueManager {
       final requestsToKeep = <QueuedRequest>[];
       final requestsToTimeout = <QueuedRequest>[];
       
-      while (_priorityQueue.isNotEmpty) {
-        final request = _priorityQueue.removeFirst();
-        final queueTime = now.difference(request.enqueuedAt);
-        
-        if (queueTime > _config.maxQueueTime) {
-          requestsToTimeout.add(request);
-        } else {
-          requestsToKeep.add(request);
+      for (final queue in _queues.values) {
+        while (queue.isNotEmpty) {
+          final request = queue.removeFirst();
+          final queueTime = now.difference(request.enqueuedAt);
+          
+          if (queueTime > _config.maxQueueTime) {
+            requestsToTimeout.add(request);
+          } else {
+            requestsToKeep.add(request);
+          }
         }
       }
       
       // 将保留的请求重新添加到队列
       for (final request in requestsToKeep) {
-        _priorityQueue.add(request);
+        _queues[request.priority]!.add(request);
       }
       
       // 处理超时请求
@@ -332,22 +346,25 @@ class RequestQueueManager {
     
     await _queueStateLock.synchronized(() async {
       // 从队列中取出请求
-      while (_priorityQueue.isNotEmpty && requestsToExecute.length < availableSlots) {
-        final request = _priorityQueue.removeFirst();
-        
-        // 检查请求是否超时
-        if (_isRequestExpired(request)) {
-          _handleExpiredRequest(request);
-          continue;
+      for (final priority in RequestPriority.values) {
+        final queue = _queues[priority]!;
+        while (queue.isNotEmpty && requestsToExecute.length < availableSlots) {
+          final request = queue.removeFirst();
+          
+          // 检查请求是否超时
+          if (_isRequestExpired(request)) {
+            _handleExpiredRequest(request);
+            continue;
+          }
+          
+          requestsToExecute.add(request);
+          
+          await _statisticsLock.synchronized(() {
+            final priority = request.priority;
+            _statistics.queueSizes[priority] = 
+                (_statistics.queueSizes[priority] ?? 0) - 1;
+          });
         }
-        
-        requestsToExecute.add(request);
-        
-        await _statisticsLock.synchronized(() {
-          final priority = request.priority;
-          _statistics.queueSizes[priority] = 
-              (_statistics.queueSizes[priority] ?? 0) - 1;
-        });
       }
     });
     
@@ -434,11 +451,16 @@ class RequestQueueManager {
         for (final duplicateRequest in duplicateRequests!) {
           try {
             if (!duplicateRequest.completer.isCompleted) {
-              duplicateRequest.completer.complete(response.data);
+              // 根据泛型类型完成请求
+              if (duplicateRequest is QueuedRequest<Response>) {
+                duplicateRequest.completer.complete(response);
+              } else {
+                duplicateRequest.completer.complete(response.data);
+              }
             }
           } catch (e) {
             // 记录错误但不影响其他请求
-            print('完成重复请求时发生错误: $e');
+            NetworkLogger.queue.warning('完成重复请求时发生错误: $e');
             // 如果完成失败，尝试用错误完成
             try {
               if (!duplicateRequest.completer.isCompleted) {
@@ -447,7 +469,7 @@ class RequestQueueManager {
                 );
               }
             } catch (e2) {
-              print('完成重复请求错误时再次发生错误: $e2');
+              NetworkLogger.queue.warning('完成重复请求错误时再次发生错误: $e2');
             }
           }
         }
@@ -456,10 +478,15 @@ class RequestQueueManager {
       // 完成原始请求
       try {
         if (!request.completer.isCompleted) {
-          request.completer.complete(response.data);
+          // 根据泛型类型完成请求
+          if (request is QueuedRequest<Response>) {
+            request.completer.complete(response);
+          } else {
+            request.completer.complete(response.data);
+          }
         }
       } catch (e) {
-        print('完成原始请求时发生错误: $e');
+        NetworkLogger.queue.warning('完成原始请求时发生错误: $e');
         try {
           if (!request.completer.isCompleted) {
             request.completer.completeError(
@@ -467,11 +494,11 @@ class RequestQueueManager {
             );
           }
         } catch (e2) {
-          print('完成原始请求错误时再次发生错误: $e2');
+          NetworkLogger.queue.warning('完成原始请求错误时再次发生错误: $e2');
         }
       }
     } catch (e) {
-      print('处理请求成功时发生未预期错误: $e');
+      NetworkLogger.queue.warning('处理请求成功时发生未预期错误: $e');
       // 确保请求被标记为完成
       try {
         if (!request.completer.isCompleted) {
@@ -479,9 +506,9 @@ class RequestQueueManager {
             Exception('处理请求成功时发生内部错误: $e')
           );
         }
-      } catch (e2) {
-        print('处理内部错误时再次发生错误: $e2');
-      }
+              } catch (e2) {
+          NetworkLogger.queue.warning('处理内部错误时再次发生错误: $e2');
+        }
     } finally {
       // 原子操作：清理状态
       await _requestStateLock.synchronized(() {
@@ -549,7 +576,7 @@ class RequestQueueManager {
             }
           } catch (e) {
             // 记录错误但不影响其他请求
-            print('完成重复请求错误时发生错误: $e');
+            NetworkLogger.queue.warning('完成重复请求错误时发生错误: $e');
             // 尝试用包装错误完成
             try {
               if (!duplicateRequest.completer.isCompleted) {
@@ -558,7 +585,7 @@ class RequestQueueManager {
                 );
               }
             } catch (e2) {
-              print('完成重复请求包装错误时再次发生错误: $e2');
+              NetworkLogger.queue.warning('完成重复请求包装错误时再次发生错误: $e2');
             }
           }
         }
@@ -570,7 +597,7 @@ class RequestQueueManager {
           request.completer.completeError(error);
         }
       } catch (e) {
-        print('完成原始请求错误时发生错误: $e');
+        NetworkLogger.queue.warning('完成原始请求错误时发生错误: $e');
         try {
           if (!request.completer.isCompleted) {
             request.completer.completeError(
@@ -578,11 +605,11 @@ class RequestQueueManager {
             );
           }
         } catch (e2) {
-          print('完成原始请求包装错误时再次发生错误: $e2');
+          NetworkLogger.queue.warning('完成原始请求包装错误时再次发生错误: $e2');
         }
       }
     } catch (e) {
-      print('处理请求错误时发生未预期错误: $e, 原始错误: $error');
+      NetworkLogger.queue.warning('处理请求错误时发生未预期错误: $e, 原始错误: $error');
       // 确保请求被标记为完成
       try {
         if (!request.completer.isCompleted) {
@@ -591,7 +618,7 @@ class RequestQueueManager {
           );
         }
       } catch (e2) {
-        print('处理内部错误时再次发生错误: $e2');
+        NetworkLogger.queue.warning('处理内部错误时再次发生错误: $e2');
       }
     } finally {
       // 清理状态
@@ -658,7 +685,7 @@ class RequestQueueManager {
           }
         } catch (e) {
           // 记录错误但不影响其他请求
-          print('完成请求超时时发生错误: $e');
+          NetworkLogger.queue.warning('完成请求超时时发生错误: $e');
         }
       }
     }
@@ -669,7 +696,7 @@ class RequestQueueManager {
         request.completer.completeError(error);
       }
     } catch (e) {
-      print('完成原始请求超时时发生错误: $e');
+      NetworkLogger.queue.warning('完成原始请求超时时发生错误: $e');
     }
     
     // 清理状态
@@ -713,7 +740,7 @@ class RequestQueueManager {
       
       // 重新入队
       await _queueStateLock.synchronized(() {
-        _priorityQueue.add(request);
+        _queues[request.priority]!.add(request);
         
         _statisticsLock.synchronized(() {
           final priority = request.priority;
@@ -941,8 +968,10 @@ class RequestQueueManager {
     final allRequests = <QueuedRequest>[];
     
     await _queueStateLock.synchronized(() {
-      while (_priorityQueue.isNotEmpty) {
-        allRequests.add(_priorityQueue.removeFirst());
+      for (final queue in _queues.values) {
+        while (queue.isNotEmpty) {
+          allRequests.add(queue.removeFirst());
+        }
       }
     });
     
@@ -963,7 +992,7 @@ class RequestQueueManager {
     // 将其他请求重新添加到队列
     await _queueStateLock.synchronized(() {
       for (final request in allRequests) {
-        _priorityQueue.add(request);
+        _queues[request.priority]!.add(request);
       }
     });
     
@@ -993,11 +1022,13 @@ class RequestQueueManager {
     final samepriorityRequests = <QueuedRequest>[];
     
     await _queueStateLock.synchronized(() {
-      while (_priorityQueue.isNotEmpty) {
-        final request = _priorityQueue.removeFirst();
-        if (request.priority == priority) {
-          samepriorityRequests.add(request);
-        } else {
+      while (_queues[priority]!.isNotEmpty) {
+        final request = _queues[priority]!.removeFirst();
+        samepriorityRequests.add(request);
+      }
+      for (final queue in _queues.values) {
+        while (queue.isNotEmpty) {
+          final request = queue.removeFirst();
           allRequests.add(request);
         }
       }
@@ -1007,7 +1038,7 @@ class RequestQueueManager {
       // 没有同优先级的请求，将所有请求放回队列
       await _queueStateLock.synchronized(() {
         for (final request in allRequests) {
-          _priorityQueue.add(request);
+          _queues[request.priority]!.add(request);
         }
       });
       return false;
@@ -1022,10 +1053,10 @@ class RequestQueueManager {
     // 将其他请求重新添加到队列
     await _queueStateLock.synchronized(() {
       for (final request in allRequests) {
-        _priorityQueue.add(request);
+        _queues[request.priority]!.add(request);
       }
       for (final request in samepriorityRequests) {
-        _priorityQueue.add(request);
+        _queues[request.priority]!.add(request);
       }
     });
     
@@ -1059,6 +1090,8 @@ class RequestQueueManager {
   void dispose() {
     _processingTimer?.cancel();
     _processingTimer = null;
+    _timeoutMonitoringTimer?.cancel();
+    _timeoutMonitoringTimer = null;
     
     // 清空所有队列
     clearQueue();

@@ -1,4 +1,4 @@
-import 'network_config.dart';
+import '../../config/network_config.dart';
 import '../cache/cache_manager.dart';
 import '../../utils/network_logger.dart';
 
@@ -89,6 +89,11 @@ class NetworkConfigValidator extends ConfigValidator<NetworkConfig> {
     final errors = <String>[];
     final warnings = <String>[];
     
+    // 空值检查
+    if (config == null) {
+      return ValidationResult.failure(['NetworkConfig cannot be null']);
+    }
+    
     // 验证基础URL
     if (config.baseUrl.isEmpty) {
       errors.add('Base URL cannot be empty');
@@ -141,20 +146,20 @@ class NetworkConfigValidator extends ConfigValidator<NetworkConfig> {
     
     // 验证缓存设置
     if (config.enableCache) {
-      if (config.cacheMaxAge <= 0) {
+      if (config.defaultCacheDuration <= 0) {
         errors.add('Cache max age must be positive when cache is enabled');
-      } else if (config.cacheMaxAge < 60) {
-        warnings.add('Cache max age is very short (${config.cacheMaxAge}s), consider increasing it');
-      } else if (config.cacheMaxAge > 86400) {
-        warnings.add('Cache max age is very long (${config.cacheMaxAge}s), consider reducing it');
+      } else if (config.defaultCacheDuration < 60) {
+        warnings.add('Cache max age is very short (${config.defaultCacheDuration}s), consider increasing it');
+      } else if (config.defaultCacheDuration > 86400) {
+        warnings.add('Cache max age is very long (${config.defaultCacheDuration}s), consider reducing it');
       }
     }
     
     // 验证重试设置
-    if (config.maxRetryCount < 0) {
+    if (config.maxRetries < 0) {
       errors.add('Max retries cannot be negative');
-    } else if (config.maxRetryCount > 5) {
-      warnings.add('Max retries is high (${config.maxRetryCount}), consider reducing it');
+    } else if (config.maxRetries > 5) {
+      warnings.add('Max retries is high (${config.maxRetries}), consider reducing it');
     }
     
     if (config.retryDelay <= 0) {
@@ -166,13 +171,13 @@ class NetworkConfigValidator extends ConfigValidator<NetworkConfig> {
     }
     
     // 验证指数退避设置
-    if (config.enableExponentialBackoff && config.maxRetryCount > 0) {
+    if (config.enableExponentialBackoff && config.maxRetries > 0) {
       if (config.retryDelay < 500) {
         warnings.add('Initial retry delay is short for exponential backoff (${config.retryDelay}ms), consider increasing it');
       }
       
       // 计算最大延迟时间（假设指数因子为2）
-      final maxDelay = config.calculateRetryDelay(config.maxRetryCount - 1);
+      final maxDelay = config.calculateRetryDelay(config.maxRetries - 1);
       if (maxDelay > 30000) {
         warnings.add('Maximum retry delay with exponential backoff is very long (${maxDelay}ms)');
       }
@@ -190,6 +195,11 @@ class CacheConfigValidator extends ConfigValidator<CacheConfig> {
   ValidationResult validate(CacheConfig config) {
     final errors = <String>[];
     final warnings = <String>[];
+    
+    // 空值检查
+    if (config == null) {
+      return ValidationResult.failure(['CacheConfig cannot be null']);
+    }
     
     // 验证内存缓存设置
     if (config.enableMemoryCache) {
@@ -277,6 +287,14 @@ class CompositeConfigValidator {
     final errors = <String>[];
     final warnings = <String>[];
     
+    // 空值检查
+    if (networkConfig == null) {
+      return ValidationResult.failure(['NetworkConfig cannot be null']);
+    }
+    if (cacheConfig == null) {
+      return ValidationResult.failure(['CacheConfig cannot be null']);
+    }
+    
     // 首先验证各自的配置
     final networkResult = _networkValidator.validate(networkConfig);
     final cacheResult = _cacheValidator.validate(cacheConfig);
@@ -296,8 +314,8 @@ class CompositeConfigValidator {
     }
     
     // 验证缓存过期时间兼容性
-    if (networkConfig.enableCache && cacheConfig.defaultExpiry.inSeconds < networkConfig.cacheMaxAge) {
-      warnings.add('Cache default expiry (${cacheConfig.defaultExpiry.inSeconds}s) is shorter than network cache max age (${networkConfig.cacheMaxAge}s)');
+    if (networkConfig.enableCache && cacheConfig.defaultExpiry.inSeconds < networkConfig.defaultCacheDuration) {
+      warnings.add('Cache default expiry (${cacheConfig.defaultExpiry.inSeconds}s) is shorter than network cache max age (${networkConfig.defaultCacheDuration}s)');
     }
     
     return errors.isEmpty 
@@ -418,8 +436,8 @@ class ConfigValidationUtils {
     buffer.writeln('  Receive Timeout: ${networkConfig.receiveTimeout}ms');
     buffer.writeln('  Send Timeout: ${networkConfig.sendTimeout}ms');
     buffer.writeln('  Enable Cache: ${networkConfig.enableCache}');
-    buffer.writeln('  Cache Max Age: ${networkConfig.cacheMaxAge}s');
-    buffer.writeln('  Max Retries: ${networkConfig.maxRetryCount}');
+    buffer.writeln('  Cache Max Age: ${networkConfig.defaultCacheDuration}s');
+    buffer.writeln('  Max Retries: ${networkConfig.maxRetries}');
     buffer.writeln('  Retry Delay: ${networkConfig.retryDelay}ms');
     buffer.writeln('  Enable Logging: ${networkConfig.enableLogging}');
     buffer.writeln();
@@ -557,7 +575,7 @@ class ConfigSuggestionEngine {
   
   static void _addReliabilitySuggestions(List<ConfigSuggestion> suggestions, NetworkConfig networkConfig, CacheConfig cacheConfig) {
     // 重试建议
-    if (networkConfig.maxRetryCount == 0) {
+    if (networkConfig.maxRetries == 0) {
       suggestions.add(ConfigSuggestion(
         category: 'Reliability',
         description: 'No retry mechanism configured',
@@ -566,10 +584,10 @@ class ConfigSuggestionEngine {
       ));
     }
     
-    if (networkConfig.maxRetryCount > 3) {
+    if (networkConfig.maxRetries > 3) {
       suggestions.add(ConfigSuggestion(
         category: 'Reliability',
-        description: 'Too many retries configured (${networkConfig.maxRetryCount})',
+        description: 'Too many retries configured (${networkConfig.maxRetries})',
         recommendation: 'Reduce retries to 2-3 to avoid excessive delays',
         priority: ConfigSuggestionPriority.medium,
       ));

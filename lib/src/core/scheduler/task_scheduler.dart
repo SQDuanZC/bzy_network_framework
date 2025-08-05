@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../../utils/network_logger.dart';
 
 /// 任务调度器
 /// 支持优先级调度、依赖管理、并发控制、重试机制
@@ -80,9 +81,7 @@ class TaskScheduler {
       timestamp: DateTime.now(),
     ));
     
-    if (kDebugMode) {
-        debugPrint('任务调度器已启动');
-      }
+    NetworkLogger.general.info('任务调度器已启动');
   }
   
   /// 停止调度器
@@ -107,9 +106,7 @@ class TaskScheduler {
         timestamp: DateTime.now(),
       ));
       
-      if (kDebugMode) {
-        debugPrint('任务调度器已停止');
-      }
+      NetworkLogger.general.info('任务调度器已停止');
     });
   }
   
@@ -117,14 +114,18 @@ class TaskScheduler {
   
   /// 配置调度器
   void configure(SchedulerConfig config) {
+    // 空值检查
+    if (config == null) {
+      NetworkLogger.general.warning('配置调度器: config 为空');
+      throw ArgumentError('config cannot be null');
+    }
+    
     _config = config;
     
     // 更新并发控制
     _semaphore = Semaphore(_config.maxConcurrentTasks);
     
-    if (kDebugMode) {
-      debugPrint('任务调度器已重新配置: 最大并发数=${config.maxConcurrentTasks}');
-    }
+    NetworkLogger.general.info('任务调度器已重新配置: 最大并发数=${config.maxConcurrentTasks}');
   }
   
   /// 提交任务
