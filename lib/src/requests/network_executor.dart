@@ -8,6 +8,7 @@ import '../model/network_response.dart';
 import '../config/network_config.dart';
 import '../core/exception/unified_exception_handler.dart';
 import '../core/interceptor/interceptor_manager.dart';
+import '../core/queue/request_queue_manager.dart';
 import 'batch_request.dart';
 
 /// 请求生命周期跟踪器
@@ -63,12 +64,8 @@ class NetworkExecutor {
   
   // 请求队列
   final Map<String, Completer<NetworkResponse<dynamic>>> _pendingRequests = {};
-  final Map<RequestPriority, List<BaseNetworkRequest<dynamic>>> _requestQueues = {
-    RequestPriority.critical: [],
-    RequestPriority.high: [],
-    RequestPriority.normal: [],
-    RequestPriority.low: [],
-  };
+  // 使用RequestQueueManager替代自定义队列实现
+  final RequestQueueManager _queueManager = RequestQueueManager.instance;
   bool _isProcessingQueue = false;
   
   // 批量请求标记，避免重复处理
@@ -412,194 +409,132 @@ class NetworkExecutor {
   
   /// 根据优先级入队请求
   Future<NetworkResponse<T>> _enqueueRequest<T>(BaseNetworkRequest<T> request) async {
-    final completer = Completer<NetworkResponse<T>>();
     final requestKey = _getRequestKey(request);
-    
     print('🔍 [DEBUG] _enqueueRequest called for ${request.runtimeType} with key: $requestKey');
     
-    // 原子操作：添加到队列和待处理请求映射
-    await _queueLock.synchronized(() {
-      _requestQueues[request.priority]!.add(request);
-      print('🔍 [DEBUG] Added to queue ${request.priority}, queue size: ${_requestQueues[request.priority]!.length}');
-    });
-    
-    await _pendingRequestsLock.synchronized(() {
-      _pendingRequests[requestKey] = completer as Completer<NetworkResponse<dynamic>>;
-      print('🔍 [DEBUG] Added to _pendingRequests, total pending: ${_pendingRequests.length}');
-    });
-    
-    // 如果队列未在处理中，开始处理队列
-    await _processingLock.synchronized(() {
-      if (!_isProcessingQueue) {
-        print('🔍 [DEBUG] Starting queue processing');
-        unawaited(_processRequestQueue());
-      } else {
-        print('🔍 [DEBUG] Queue processing already in progress');
-      }
-    });
-    
-    print('🔍 [DEBUG] Waiting for enqueued request completer...');
-    
-    // 添加超时处理，确保即使队列处理出现问题，请求也能在一定时间后完成
+    // 使用RequestQueueManager处理请求入队
     try {
-      // 创建一个变量来跟踪响应状态
-      NetworkResponse<T>? receivedResponse;
-      
-      // 添加响应跟踪器
+      // 创建请求跟踪器
       final requestTracker = RequestLifecycleTracker('${request.runtimeType}_$requestKey');
       
-      return await completer.future.timeout(
-        const Duration(seconds: 10), // 缩短超时时间
-        onTimeout: () {
-          print('🔍 [DEBUG] Request timed out, checking response status');
-          
-          // 如果超时，从队列和待处理请求中移除
-          _queueLock.synchronized(() {
-            _requestQueues[request.priority]!.removeWhere(
-              (r) => _getRequestKey(r) == requestKey
-            );
-          });
-          
-          _pendingRequestsLock.synchronized(() {
-            _pendingRequests.remove(requestKey);
-          });
-          
-          // 打印请求生命周期信息
-          print('🔍 [DEBUG] ${requestTracker.summary}');
-          
-          throw TimeoutException('请求在10秒后超时', const Duration(seconds: 10));
+      // 将请求添加到待处理映射
+      final completer = Completer<NetworkResponse<T>>();
+      await _pendingRequestsLock.synchronized(() {
+        _pendingRequests[requestKey] = completer as Completer<NetworkResponse<dynamic>>;
+        print('🔍 [DEBUG] Added to _pendingRequests, total pending: ${_pendingRequests.length}');
+      });
+      
+      // 使用RequestQueueManager入队请求
+      final response = await _queueManager.enqueue<Response>(
+        () => _dio.fetch<dynamic>(request.buildRequestOptions()),
+        priority: request.priority,
+        requestId: requestKey,
+        timeout: const Duration(seconds: 10),
+        metadata: {
+          'method': request.method.value,
+          'path': request.path,
+          'requestType': request.runtimeType.toString(),
         },
       );
+      
+      // 记录响应接收时间
+      requestTracker.onResponseReceived();
+      print('🔍 [DEBUG] 收到响应: ${response.statusCode}');
+      
+      // 解析响应数据
+      print('🔍 [DEBUG] 开始解析响应数据');
+      final parsedData = request.parseResponse(response.data);
+      
+      // 记录解析完成时间
+      requestTracker.onParseCompleted();
+      print('🔍 [DEBUG] 响应数据解析完成');
+      
+      final networkResponse = NetworkResponse<T>.success(
+        data: parsedData,
+        statusCode: response.statusCode ?? 200,
+        message: response.statusMessage ?? 'Success',
+        headers: response.headers.map,
+        duration: response.requestOptions.extra['duration'] as int? ?? 0,
+      );
+      
+      if (request.enableCache) {
+        _cacheResponse(request, networkResponse);
+      }
+      
+      // 记录请求完成时间
+      requestTracker.onCompleted();
+      print('🔍 [DEBUG] 请求完成: ${requestTracker.summary}');
+      
+      request.onRequestComplete(networkResponse);
+      
+      // 从待处理请求中移除
+      await _pendingRequestsLock.synchronized(() {
+        _pendingRequests.remove(requestKey);
+      });
+      
+      return networkResponse;
     } catch (e) {
-      if (e is TimeoutException) {
-        print('🔍 [DEBUG] 处理超时异常: ${e.message}');
+      print('🔍 [DEBUG] 处理请求异常: ${e.toString()}');
+      
+      // 检查是否已经收到了响应但处理超时
+      if (e is TimeoutException || e is DioException && e.type == DioExceptionType.receiveTimeout) {
+        print('🔍 [DEBUG] 处理超时异常');
         
-        // 检查是否已经收到了响应但处理超时
         final response = await _checkResponseStatus<T>(request);
         if (response != null) {
           print('🔍 [DEBUG] 已找到响应数据，返回成功响应');
           return response;
         }
-        
-        return NetworkResponse<T>.error(
-          message: '请求超时',
-          statusCode: -999,
-          errorCode: 'REQUEST_TIMEOUT',
-        );
       }
-      rethrow;
+      
+      // 处理错误
+      final error = e is DioException ? e : DioException(
+        requestOptions: request.buildRequestOptions(),
+        error: e
+      );
+      
+      final networkException = UnifiedExceptionHandler.instance.createNetworkException(error);
+      final customException = request.handleError(error);
+      final finalException = customException ?? networkException;
+      
+      request.onRequestError(finalException as NetworkException);
+      
+      // 从待处理请求中移除
+      await _pendingRequestsLock.synchronized(() {
+        _pendingRequests.remove(requestKey);
+      });
+      
+      throw finalException;
     }
   }
   
-  /// 处理请求队列
-  Future<void> _processRequestQueue() async {
-    print('🔍 [DEBUG] _processRequestQueue called, _isProcessingQueue: $_isProcessingQueue');
-    // 避免重复处理
-    if (_isProcessingQueue) {
-      print('🔍 [DEBUG] Queue processing already in progress, returning');
-      return;
-    }
-    
-    _isProcessingQueue = true;
-    
-    try {
-      // 添加总体超时
-      final timeout = const Duration(seconds: 10); // 缩短超时时间
-      final stopTime = DateTime.now().add(timeout);
-      
-      // 持续处理直到所有队列为空或超时
-      while (_hasQueuedRequests() && DateTime.now().isBefore(stopTime)) {
-        // 按优先级处理请求（critical -> high -> normal -> low）
-        for (final priority in RequestPriority.values.reversed) {
-          // 原子操作：从队列中取出请求
-          BaseNetworkRequest<dynamic>? request;
-          await _queueLock.synchronized(() {
-            final queue = _requestQueues[priority]!;
-            if (queue.isNotEmpty) {
-              request = queue.removeAt(0);
-            }
-          });
-          
-          if (request != null) {
-            final requestKey = _getRequestKey(request!);
-            
-            try {
-              final result = await _executeRequest(request!);
-              
-              // 原子操作：完成待处理请求
-              await _pendingRequestsLock.synchronized(() {
-                if (_pendingRequests.containsKey(requestKey)) {
-                  final completer = _pendingRequests[requestKey]! as Completer<NetworkResponse<dynamic>>;
-                  if (!completer.isCompleted) {
-                    completer.complete(result.cast<dynamic>());
-                  }
-                  _pendingRequests.remove(requestKey);
-                }
-              });
-            } catch (error) {
-              // 原子操作：完成错误请求
-              await _pendingRequestsLock.synchronized(() {
-                if (_pendingRequests.containsKey(requestKey)) {
-                  final completer = _pendingRequests[requestKey]! as Completer<NetworkResponse<dynamic>>;
-                  if (!completer.isCompleted) {
-                    completer.completeError(error);
-                  }
-                  _pendingRequests.remove(requestKey);
-                }
-              });
-            }
-            
-            // 添加小延迟以避免请求过于频繁
-            if (priority != RequestPriority.critical) {
-              await Future.delayed(const Duration(milliseconds: 10));
-            }
-            
-            // 中断循环，从最高优先级重新开始检查
-            break;
-          }
-        }
-        
-        // 检查队列前的小延迟
-        await Future.delayed(const Duration(milliseconds: 1));
-      }
-      
-      // 如果超时后仍有请求，清理它们
-      if (_hasQueuedRequests()) {
-        print('🔍 [DEBUG] Queue processing timed out, cleaning up remaining requests');
-        await cancelAllRequests();
-      }
-    } finally {
-      _isProcessingQueue = false;
-    }
-  }
-  
-  /// 检查是否有排队的请求
-  bool _hasQueuedRequests() {
-    return _requestQueues.values.any((queue) => queue.isNotEmpty);
-  }
+  // 这些方法已由RequestQueueManager接管
   
   /// 取消请求
   void cancelRequest(BaseNetworkRequest request) {
     final requestKey = _getRequestKey(request);
     
-    // 从待处理请求中移除
-    final completer = _pendingRequests.remove(requestKey);
-    if (completer != null && !completer.isCompleted) {
-      completer.complete(NetworkResponse<dynamic>.error(
-        message: '请求已取消',
-        statusCode: -999,
-        errorCode: 'CANCELLED',
-      ));
-    }
+    // 使用RequestQueueManager取消请求
+    _queueManager.cancelRequest(requestKey);
     
-    // 从队列中移除
-    for (final queue in _requestQueues.values) {
-      queue.removeWhere((r) => _getRequestKey(r) == requestKey);
-    }
+    // 从待处理请求中移除
+    _pendingRequestsLock.synchronized(() {
+      final completer = _pendingRequests.remove(requestKey);
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(NetworkResponse<dynamic>.error(
+          message: '请求已取消',
+          statusCode: -999,
+          errorCode: 'CANCELLED',
+        ));
+      }
+    });
   }
   
   /// 取消所有请求
   Future<void> cancelAllRequests() async {
+    // 使用RequestQueueManager清空队列
+    _queueManager.clearQueue();
+    
     // 原子操作：取消所有待处理请求
     await _pendingRequestsLock.synchronized(() {
       for (final completer in _pendingRequests.values) {
@@ -612,13 +547,6 @@ class NetworkExecutor {
         }
       }
       _pendingRequests.clear();
-    });
-    
-    // 原子操作：清空所有队列
-    await _queueLock.synchronized(() {
-      for (final queue in _requestQueues.values) {
-        queue.clear();
-      }
     });
     
     // 清理批量请求标记
@@ -758,18 +686,25 @@ class NetworkExecutor {
     }
     _cacheTimers.clear();
     
+    // 销毁队列管理器
+    _queueManager.dispose();
+    
     _dio.close();
     _cache.clear();
   }
   
   /// 获取当前状态信息
   Map<String, dynamic> getStatus() {
+    final queueStatus = _queueManager.getQueueStatus();
+    
     return {
       'pendingRequests': _pendingRequests.length,
-      'queuedRequests': _requestQueues.values.fold(0, (sum, queue) => sum + queue.length),
+      'queuedRequests': queueStatus['totalQueued'],
+      'executing': queueStatus['executing'],
       'isProcessingQueue': _isProcessingQueue,
       'cacheSize': _cache.length,
       'batchRequestsCount': _batchRequestIds.length,
+      'queueStatistics': queueStatus['statistics'],
     };
   }
   
