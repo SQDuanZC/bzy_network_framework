@@ -5,11 +5,21 @@ English | [中文](README.md)
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.3-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.4-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY Network Framework** is a high-performance, easily extensible Flutter network request solution that provides comprehensive network requests, caching, interceptors, monitoring, and other features.
 
-## 🆕 Latest Updates (v1.0.3)
+## 🆕 Latest Updates (v1.0.4)
+
+- 🛠️ **Error Handling Enhancement**: Added unified error handling mechanism with custom error handling for different HTTP status codes
+- 🔄 **Request Lifecycle Tracking**: Implemented RequestLifecycleTracker to monitor request stages (sending, receiving, parsing, completion)
+- ⏱️ **Timeout Handling Optimization**: Improved timeout handling logic to avoid marking successfully completed requests as timed out
+- 📊 **Response Recovery Mechanism**: Added response recovery mechanism to retrieve data even when type conversion errors occur
+- 📝 **Enhanced Logging System**: Improved logging with detailed request/response information and performance metrics
+- 🧪 **Test Framework Improvement**: Enhanced test framework with mock data and flexible assertions for better test stability
+- 🔒 **Type System Optimization**: Improved generic handling to reduce type conversion errors
+
+### v1.0.3 Updates
 
 - 🔒 **Concurrency Safety Enhancement**: Refined lock granularity by replacing global locks with specialized locks, reducing lock contention and improving concurrent throughput
 - 🚀 **Queue Management Optimization**: Implemented efficient priority queue to replace multiple queue implementation, improving processing efficiency
@@ -42,6 +52,8 @@ English | [中文](README.md)
 - 🛡️ **Type Safety**: Complete TypeScript-style type definitions
 - 📱 **Mobile Optimized**: Optimized for mobile network environments
 - 🔐 **Secure & Reliable**: Support for certificate pinning and request signing
+- 🔍 **Comprehensive Error Handling**: Unified error handling with custom error handling for different HTTP status codes
+- 📝 **Detailed Logging**: Enhanced logging system with request/response details and performance metrics
 
 ## 🚀 Quick Start
 
@@ -72,11 +84,18 @@ void main() async {
   // Initialize BZY Network Framework
   await UnifiedNetworkFramework.initialize(
     baseUrl: 'https://api.example.com',
-    connectTimeout: Duration(seconds: 10),
-    receiveTimeout: Duration(seconds: 30),
-    enableLogging: true,
-    enableCache: true,
-    maxRetries: 3,
+    config: {
+      'connectTimeout': 100000,
+      'receiveTimeout': 100000,
+      'enableLogging': true,
+      'enableCache': true,
+      'environment': Environment.development,
+    },
+    plugins: [
+      NetworkPluginFactory.createCachePlugin(),
+      NetworkPluginFactory.createRetryPlugin(),
+      NetworkPluginFactory.createLoggingPlugin(),
+    ],
   );
   
   runApp(MyApp());
@@ -138,168 +157,64 @@ class GetUserRequest extends BaseNetworkRequest<User> {
   String get path => '/users/$userId';
   
   @override
-  User parseResponse(Map<String, dynamic> json) {
-    return User.fromJson(json['data']);
+  User parseResponse(dynamic data) {
+    if (data is String) {
+      final jsonData = json.decode(data) as Map<String, dynamic>;
+      return User.fromJson(jsonData['data']);
+    }
+    return User.fromJson((data as Map<String, dynamic>)['data']);
   }
-}
-
-// Get user list
-class GetUsersRequest extends BaseNetworkRequest<List<User>> {
-  final int page;
-  final int limit;
-  
-  GetUsersRequest({this.page = 1, this.limit = 20});
   
   @override
-  HttpMethod get method => HttpMethod.get;
-  
-  @override
-  String get path => '/users';
-  
-  @override
-  Map<String, dynamic> get queryParameters => {
-    'page': page,
-    'limit': limit,
-  };
-  
-  @override
-  List<User> parseResponse(Map<String, dynamic> json) {
-    final List<dynamic> data = json['data'];
-    return data.map((item) => User.fromJson(item)).toList();
+  NetworkException? handleError(DioException error) {
+    if (error.response?.statusCode == 403) {
+      return NetworkException(
+        message: 'Access denied',
+        statusCode: 403,
+        errorCode: 'ACCESS_DENIED',
+      );
+    }
+    return null; // Let the framework handle other errors
   }
 }
 ```
 
-#### 3. POST Requests
-
-```dart
-// Create user
-class CreateUserRequest extends BaseNetworkRequest<User> {
-  final String name;
-  final String email;
-  
-  CreateUserRequest({required this.name, required this.email});
-  
-  @override
-  HttpMethod get method => HttpMethod.post;
-  
-  @override
-  String get path => '/users';
-  
-  @override
-  Map<String, dynamic> get data => {
-    'name': name,
-    'email': email,
-  };
-  
-  @override
-  User parseResponse(Map<String, dynamic> json) {
-    return User.fromJson(json['data']);
-  }
-}
-```
-
-#### 4. PUT/PATCH Requests
-
-```dart
-// Update user information
-class UpdateUserRequest extends BaseNetworkRequest<User> {
-  final String userId;
-  final String? name;
-  final String? email;
-  
-  UpdateUserRequest({
-    required this.userId,
-    this.name,
-    this.email,
-  });
-  
-  @override
-  HttpMethod get method => HttpMethod.put;
-  
-  @override
-  String get path => '/users/$userId';
-  
-  @override
-  Map<String, dynamic> get data => {
-    if (name != null) 'name': name,
-    if (email != null) 'email': email,
-  };
-  
-  @override
-  User parseResponse(Map<String, dynamic> json) {
-    return User.fromJson(json['data']);
-  }
-}
-```
-
-#### 5. DELETE Requests
-
-```dart
-// Delete user
-class DeleteUserRequest extends BaseNetworkRequest<bool> {
-  final String userId;
-  
-  DeleteUserRequest(this.userId);
-  
-  @override
-  HttpMethod get method => HttpMethod.delete;
-  
-  @override
-  String get path => '/users/$userId';
-  
-  @override
-  bool parseResponse(Map<String, dynamic> json) {
-    return json['success'] ?? false;
-  }
-}
-```
-
-#### 6. Execute Requests
+#### 3. Execute Requests
 
 ```dart
 // Basic request execution
 final getUserRequest = GetUserRequest('123');
-final response = await UnifiedNetworkFramework.instance.execute(getUserRequest);
 
-if (response.isSuccess) {
-  final user = response.data;
-  print('User name: ${user?.name}');
-} else {
-  print('Request failed: ${response.message}');
-  print('Error code: ${response.statusCode}');
-}
-
-// Request with error handling
-try {
-  final createRequest = CreateUserRequest(
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-  );
-  
-  final result = await UnifiedNetworkFramework.instance.execute(createRequest);
-  
-  if (result.isSuccess) {
-    print('User created successfully: ${result.data?.name}');
+// Using .then() approach with error handling
+NetworkExecutor.instance.execute(getUserRequest).then((response) {
+  // Check status code
+  if (response.statusCode == 200) {
+    final user = response.data;
+    print('User name: ${user?.name}');
   } else {
-    // Handle business errors
-    switch (result.statusCode) {
-      case 400:
-        print('Invalid request parameters');
-        break;
-      case 401:
-        print('Unauthorized, please login again');
-        break;
-      case 409:
-        print('User already exists');
-        break;
-      default:
-        print('Creation failed: ${result.message}');
-    }
+    print('Request failed: ${response.message}');
+    print('Error code: ${response.statusCode}');
+  }
+}).catchError((e) {
+  // Handle network exceptions
+  if (e is NetworkException) {
+    print('Network error: ${e.message}, Status code: ${e.statusCode}');
+  } else {
+    print('Unknown error: $e');
+  }
+});
+
+// Using async/await with try-catch
+try {
+  final response = await NetworkExecutor.instance.execute(getUserRequest);
+  
+  if (response.isSuccess) {
+    print('User name: ${response.data?.name}');
+  } else {
+    print('Request failed: ${response.message}');
   }
 } catch (e) {
-  // Handle network exceptions
-  print('Network error: $e');
+  print('Error: $e');
 }
 ```
 
@@ -310,6 +225,7 @@ try {
 - [API Reference](doc/docs/API_REFERENCE.md)
 - [Best Practices](doc/docs/BEST_PRACTICES.md)
 - [Migration Guide](doc/docs/MIGRATION_GUIDE.md)
+- [Improvement Suggestions](BZY网络框架改进建议.md)
 
 ## 🏗️ Architecture
 
@@ -326,9 +242,76 @@ BZY Network Framework
 
 ## 🔧 Advanced Features
 
-### File Upload
+### Error Handling
 
-#### 1. Single File Upload
+```dart
+class CustomErrorRequest extends BaseNetworkRequest<Map<String, dynamic>> {
+  @override
+  HttpMethod get method => HttpMethod.get;
+  
+  @override
+  String get path => '/api/endpoint';
+  
+  @override
+  Map<String, dynamic> parseResponse(dynamic data) {
+    if (data is String) {
+      return json.decode(data) as Map<String, dynamic>;
+    }
+    return data as Map<String, dynamic>;
+  }
+  
+  @override
+  NetworkException? handleError(DioException error) {
+    // Custom error handling based on status code
+    if (error.response?.statusCode == 400) {
+      return NetworkException(
+        message: 'Invalid request parameters',
+        statusCode: 400,
+        errorCode: 'INVALID_PARAMETERS',
+      );
+    } else if (error.response?.statusCode == 401) {
+      return NetworkException(
+        message: 'Unauthorized, please login again',
+        statusCode: 401,
+        errorCode: 'UNAUTHORIZED',
+      );
+    } else if (error.response?.statusCode == 403) {
+      return NetworkException(
+        message: 'Access denied',
+        statusCode: 403,
+        errorCode: 'ACCESS_DENIED',
+      );
+    } else if (error.response?.statusCode == 404) {
+      return NetworkException(
+        message: 'Resource not found',
+        statusCode: 404,
+        errorCode: 'RESOURCE_NOT_FOUND',
+      );
+    } else if (error.response?.statusCode == 429) {
+      return NetworkException(
+        message: 'Too many requests, please try again later',
+        statusCode: 429,
+        errorCode: 'RATE_LIMITED',
+      );
+    } else if (error.response?.statusCode == 500) {
+      return NetworkException(
+        message: 'Server error, please try again later',
+        statusCode: 500,
+        errorCode: 'SERVER_ERROR',
+      );
+    }
+    
+    // Default error handling
+    return NetworkException(
+      message: error.message ?? 'Unknown error',
+      statusCode: error.response?.statusCode ?? -1,
+      errorCode: 'UNKNOWN_ERROR',
+    );
+  }
+}
+```
+
+### File Upload
 
 ```dart
 class UploadAvatarRequest extends UploadRequest<UploadResult> {
@@ -355,48 +338,12 @@ class UploadAvatarRequest extends UploadRequest<UploadResult> {
   };
   
   @override
-  UploadResult parseResponse(Map<String, dynamic> json) {
-    return UploadResult.fromJson(json['data']);
-  }
-}
-
-// Execute upload
-final uploadRequest = UploadAvatarRequest(imageFile, '123');
-final result = await UnifiedNetworkFramework.instance.execute(uploadRequest);
-
-if (result.isSuccess) {
-  print('Upload successful: ${result.data?.url}');
-}
-```
-
-#### 2. Multiple Files Upload
-
-```dart
-class UploadMultipleFilesRequest extends UploadRequest<List<UploadResult>> {
-  final List<File> files;
-  final String albumId;
-  
-  UploadMultipleFilesRequest(this.files, this.albumId);
-  
-  @override
-  String get path => '/albums/$albumId/photos';
-  
-  @override
-  Map<String, dynamic> get files {
-    final Map<String, dynamic> fileMap = {};
-    for (int i = 0; i < files.length; i++) {
-      fileMap['photo_$i'] = MultipartFile.fromFileSync(
-        files[i].path,
-        filename: 'photo_$i.jpg',
-      );
+  UploadResult parseResponse(dynamic data) {
+    if (data is String) {
+      final jsonData = json.decode(data) as Map<String, dynamic>;
+      return UploadResult.fromJson(jsonData['data']);
     }
-    return fileMap;
-  }
-  
-  @override
-  List<UploadResult> parseResponse(Map<String, dynamic> json) {
-    final List<dynamic> data = json['data'];
-    return data.map((item) => UploadResult.fromJson(item)).toList();
+    return UploadResult.fromJson((data as Map<String, dynamic>)['data']);
   }
 }
 ```
@@ -422,41 +369,9 @@ class DownloadFileRequest extends DownloadRequest {
     print('Download progress: $progress%');
   }
 }
-
-// Execute download
-final downloadRequest = DownloadFileRequest('file123', '/path/to/save/file.pdf');
-final result = await UnifiedNetworkFramework.instance.execute(downloadRequest);
-
-if (result.isSuccess) {
-  print('Download completed: ${downloadRequest.downloadPath}');
-}
 ```
 
 ### Batch Requests
-
-#### 1. Sequential Execution
-
-```dart
-final requests = [
-  GetUserRequest('1'),
-  GetUserRequest('2'),
-  GetUserRequest('3'),
-];
-
-// Execute sequentially, one after another
-final responses = await UnifiedNetworkFramework.instance.executeBatch(
-  requests,
-  sequential: true,
-);
-
-for (int i = 0; i < responses.length; i++) {
-  if (responses[i].isSuccess) {
-    print('User ${i + 1}: ${responses[i].data?.name}');
-  }
-}
-```
-
-#### 2. Concurrent Execution
 
 ```dart
 final requests = [
@@ -478,8 +393,6 @@ print('Successful requests: $successCount/${responses.length}');
 ```
 
 ### Custom Interceptors
-
-#### 1. Authentication Interceptor
 
 ```dart
 class AuthInterceptor extends Interceptor {
@@ -507,104 +420,6 @@ class AuthInterceptor extends Interceptor {
     handler.next(err);
   }
 }
-
-// Register interceptor
-final authInterceptor = AuthInterceptor();
-UnifiedNetworkFramework.instance.addInterceptor(authInterceptor);
-
-// Set token
-authInterceptor.setToken('your_access_token');
-```
-
-#### 2. Logging Interceptor
-
-```dart
-class CustomLogInterceptor extends Interceptor {
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    print('🚀 Request: ${options.method} ${options.uri}');
-    print('📤 Headers: ${options.headers}');
-    if (options.data != null) {
-      print('📦 Data: ${options.data}');
-    }
-    handler.next(options);
-  }
-  
-  @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
-    print('✅ Response: ${response.statusCode} ${response.requestOptions.uri}');
-    print('📥 Data: ${response.data}');
-    handler.next(response);
-  }
-  
-  @override
-  void onError(DioException err, ErrorInterceptorHandler handler) {
-    print('❌ Error: ${err.message}');
-    print('🔍 Request: ${err.requestOptions.uri}');
-    handler.next(err);
-  }
-}
-```
-
-#### 3. Cache Interceptor
-
-```dart
-class CacheInterceptor extends Interceptor {
-  final Map<String, CacheItem> _cache = {};
-  final Duration cacheDuration;
-  
-  CacheInterceptor({this.cacheDuration = const Duration(minutes: 5)});
-  
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    // Only cache GET requests
-    if (options.method.toUpperCase() == 'GET') {
-      final cacheKey = _generateCacheKey(options);
-      final cacheItem = _cache[cacheKey];
-      
-      if (cacheItem != null && !cacheItem.isExpired) {
-        // Return cached data
-        final response = Response(
-          requestOptions: options,
-          data: cacheItem.data,
-          statusCode: 200,
-        );
-        handler.resolve(response);
-        return;
-      }
-    }
-    
-    handler.next(options);
-  }
-  
-  @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
-    // Cache successful GET responses
-    if (response.requestOptions.method.toUpperCase() == 'GET' && 
-        response.statusCode == 200) {
-      final cacheKey = _generateCacheKey(response.requestOptions);
-      _cache[cacheKey] = CacheItem(
-        data: response.data,
-        expireTime: DateTime.now().add(cacheDuration),
-      );
-    }
-    
-    handler.next(response);
-  }
-  
-  String _generateCacheKey(RequestOptions options) {
-    return '${options.method}_${options.uri}';
-  }
-}
-
-class CacheItem {
-  final dynamic data;
-  final DateTime expireTime;
-  
-  CacheItem({required this.data, required this.expireTime});
-  
-  bool get isExpired => DateTime.now().isAfter(expireTime);
-}
 ```
 
 ## 📊 Performance Monitoring
@@ -621,7 +436,7 @@ print('Cache hit rate: ${stats.cacheHitRate}%');
 
 ## 🚧 Development Status
 
-### Phase One (Q1-Q2): Intelligent Foundation - In Progress
+### Phase One (Q1-Q2): Intelligent Foundation - Completed
 
 **Completed Features**:
 - ✅ Core network framework architecture
@@ -630,6 +445,12 @@ print('Cache hit rate: ${stats.cacheHitRate}%');
 - ✅ Basic interceptor system
 - ✅ Simple caching mechanism
 - ✅ Basic configuration management
+- ✅ Error handling optimization
+- ✅ Request lifecycle tracking
+- ✅ Response recovery mechanism
+- ✅ Enhanced logging system
+
+### Phase Two (Q3-Q4): Advanced Features - In Progress
 
 **In Development**:
 - 🔄 Adaptive network strategies (network quality detection, adaptive timeout/retry strategies)
@@ -638,19 +459,19 @@ print('Cache hit rate: ${stats.cacheHitRate}%');
 - 🔄 Intelligent request scheduling (priority queue, dependency management, load balancing)
 - 🔄 Network security enhancement (certificate pinning, request signing, data encryption)
 - 🔄 Configuration hot updates (remote configuration, A/B testing support)
-- 🔄 Error handling optimization (intelligent retry, error classification, user-friendly prompts)
 
 **Needs Optimization**:
-- 🔧 Basic performance monitoring system enhancement
-- 🔧 Cache mechanism optimization
-- 🔧 Network configuration management enhancement
+- 🔧 Type system further optimization
+- 🔧 Cache mechanism enhancement
+- 🔧 Configurable logging levels
 
 ### Next Steps
 
 For detailed development plans and technical implementation, please refer to:
-- [Phase One Development Plan](doc/docs/PHASE_ONE_DEVELOPMENT_PLAN.md)
+- [Phase Two Development Plan](doc/docs/PHASE_TWO_DEVELOPMENT_PLAN.md)
 - [Advanced Features Roadmap](doc/docs/ADVANCED_FEATURES.md)
 - [Project Overview](doc/docs/PROJECT_OVERVIEW.md)
+- [Improvement Suggestions](BZY网络框架改进建议.md)
 
 ## 🤝 Contributing
 

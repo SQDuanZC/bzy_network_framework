@@ -10,6 +10,42 @@ import '../core/exception/unified_exception_handler.dart';
 import '../core/interceptor/interceptor_manager.dart';
 import 'batch_request.dart';
 
+/// 请求生命周期跟踪器
+class RequestLifecycleTracker {
+  final String requestId;
+  final DateTime startTime;
+  DateTime? responseReceivedTime;
+  DateTime? parseCompletedTime;
+  DateTime? completedTime;
+  
+  RequestLifecycleTracker(this.requestId) : startTime = DateTime.now();
+  
+  void onResponseReceived() {
+    responseReceivedTime = DateTime.now();
+  }
+  
+  void onParseCompleted() {
+    parseCompletedTime = DateTime.now();
+  }
+  
+  void onCompleted() {
+    completedTime = DateTime.now();
+  }
+  
+  String get summary {
+    final now = DateTime.now();
+    final totalDuration = completedTime?.difference(startTime) ?? now.difference(startTime);
+    final responseTime = responseReceivedTime?.difference(startTime);
+    final parseTime = parseCompletedTime?.difference(responseReceivedTime ?? startTime);
+    final completionTime = completedTime?.difference(parseCompletedTime ?? responseReceivedTime ?? startTime);
+    
+    return '请求[$requestId] - 总耗时: ${totalDuration.inMilliseconds}ms, '
+           '获取响应: ${responseTime?.inMilliseconds ?? "未完成"}ms, '
+           '解析数据: ${parseTime?.inMilliseconds ?? "未完成"}ms, '
+           '完成处理: ${completionTime?.inMilliseconds ?? "未完成"}ms';
+  }
+}
+
 
 /// 网络请求执行器 - 统一网络请求入口
 /// 提供高效的并发控制和请求管理
@@ -124,6 +160,9 @@ class NetworkExecutor {
     final requestKey = _getRequestKey(request);
     final completer = Completer<NetworkResponse<T>>();
     
+    // 创建请求生命周期跟踪器
+    final tracker = RequestLifecycleTracker('${request.runtimeType}_$requestKey');
+    
     // 原子操作：添加到待处理请求映射
     if (!isBatch) {
       await _pendingRequestsLock.synchronized(() {
@@ -154,8 +193,20 @@ class NetworkExecutor {
       // 直接执行请求，避免拦截器链中的无限递归
       final response = await _dio.fetch<dynamic>(options);
       
+      // 记录响应接收时间
+      tracker.onResponseReceived();
+      print('🔍 [DEBUG] 收到响应: ${response.statusCode}');
+      
       final duration = DateTime.now().difference(startTime).inMilliseconds;
+      
+      // 解析响应数据
+      print('🔍 [DEBUG] 开始解析响应数据');
       final parsedData = request.parseResponse(response.data);
+      
+      // 记录解析完成时间
+      tracker.onParseCompleted();
+      print('🔍 [DEBUG] 响应数据解析完成');
+      
       final networkResponse = NetworkResponse<T>.success(
         data: parsedData,
         statusCode: response.statusCode ?? 200,
@@ -168,6 +219,10 @@ class NetworkExecutor {
         _cacheResponse(request, networkResponse);
       }
       
+      // 记录请求完成时间
+      tracker.onCompleted();
+      print('🔍 [DEBUG] 请求完成: ${tracker.summary}');
+      
       request.onRequestComplete(networkResponse);
       if (!isBatch) {
         completer.complete(networkResponse);
@@ -175,6 +230,15 @@ class NetworkExecutor {
       
       return networkResponse;
     } catch (e) {
+      print('🔍 [DEBUG] 请求执行出错: $e');
+      
+      // 记录错误信息
+      if (tracker.responseReceivedTime != null) {
+        print('🔍 [DEBUG] 错误发生在响应接收后的处理阶段');
+      } else {
+        print('🔍 [DEBUG] 错误发生在请求发送或接收阶段');
+      }
+      
       final error = e is DioException ? e : DioException(
         requestOptions: request.buildRequestOptions(),
         error: e
@@ -183,6 +247,27 @@ class NetworkExecutor {
       final networkException = UnifiedExceptionHandler.instance.createNetworkException(error);
       final customException = request.handleError(error);
       final finalException = customException ?? networkException;
+      
+      // 如果已经收到响应但在处理过程中出错，尝试恢复
+      if (tracker.responseReceivedTime != null && e is! TimeoutException) {
+        print('🔍 [DEBUG] 尝试恢复已接收的响应数据');
+        try {
+          // 尝试再次获取响应
+          final recoveryResponse = await _checkResponseStatus<T>(request);
+          if (recoveryResponse != null) {
+            print('🔍 [DEBUG] 成功恢复响应数据');
+            
+            request.onRequestComplete(recoveryResponse);
+            if (!isBatch) {
+              completer.complete(recoveryResponse);
+            }
+            
+            return recoveryResponse;
+          }
+        } catch (recoveryError) {
+          print('🔍 [DEBUG] 恢复响应失败: $recoveryError');
+        }
+      }
       
       request.onRequestError(finalException as NetworkException);
       if (!isBatch) {
@@ -357,10 +442,17 @@ class NetworkExecutor {
     
     // 添加超时处理，确保即使队列处理出现问题，请求也能在一定时间后完成
     try {
+      // 创建一个变量来跟踪响应状态
+      NetworkResponse<T>? receivedResponse;
+      
+      // 添加响应跟踪器
+      final requestTracker = RequestLifecycleTracker('${request.runtimeType}_$requestKey');
+      
       return await completer.future.timeout(
         const Duration(seconds: 10), // 缩短超时时间
         onTimeout: () {
-          print('🔍 [DEBUG] Request timed out, completing with error');
+          print('🔍 [DEBUG] Request timed out, checking response status');
+          
           // 如果超时，从队列和待处理请求中移除
           _queueLock.synchronized(() {
             _requestQueues[request.priority]!.removeWhere(
@@ -372,11 +464,23 @@ class NetworkExecutor {
             _pendingRequests.remove(requestKey);
           });
           
-          throw TimeoutException('请求在10秒后超时');
+          // 打印请求生命周期信息
+          print('🔍 [DEBUG] ${requestTracker.summary}');
+          
+          throw TimeoutException('请求在10秒后超时', const Duration(seconds: 10));
         },
       );
     } catch (e) {
       if (e is TimeoutException) {
+        print('🔍 [DEBUG] 处理超时异常: ${e.message}');
+        
+        // 检查是否已经收到了响应但处理超时
+        final response = await _checkResponseStatus<T>(request);
+        if (response != null) {
+          print('🔍 [DEBUG] 已找到响应数据，返回成功响应');
+          return response;
+        }
+        
         return NetworkResponse<T>.error(
           message: '请求超时',
           statusCode: -999,
@@ -667,6 +771,39 @@ class NetworkExecutor {
       'cacheSize': _cache.length,
       'batchRequestsCount': _batchRequestIds.length,
     };
+  }
+  
+  /// 检查请求是否已经收到响应但处理超时
+  Future<NetworkResponse<T>?> _checkResponseStatus<T>(BaseNetworkRequest<T> request) async {
+    try {
+      print('🔍 [DEBUG] 检查请求状态: ${request.path}');
+      
+      // 尝试直接执行一次请求，但不入队
+      final options = request.buildRequestOptions();
+      final response = await _dio.fetch<dynamic>(options).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw TimeoutException('状态检查超时', const Duration(seconds: 5));
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        print('🔍 [DEBUG] 请求状态检查成功，状态码: ${response.statusCode}');
+        
+        // 解析响应数据
+        final parsedData = request.parseResponse(response.data);
+        return NetworkResponse<T>.success(
+          data: parsedData,
+          statusCode: response.statusCode ?? 200,
+          message: '请求成功但处理超时，已恢复响应',
+          headers: response.headers.map,
+        );
+      }
+    } catch (e) {
+      print('🔍 [DEBUG] 请求状态检查失败: $e');
+    }
+    
+    return null;
   }
   
   /// 执行文件下载请求

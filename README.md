@@ -5,11 +5,21 @@
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.3-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.4-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY 网络框架** 是一个高性能、易扩展的 Flutter 网络请求解决方案，提供完整的网络请求、缓存、拦截器、监控等功能。
 
-## 🆕 最新更新 (v1.0.3)
+## 🆕 最新更新 (v1.0.4)
+
+- 🛠️ **错误处理增强**: 添加统一错误处理机制，支持针对不同HTTP状态码的自定义错误处理
+- 🔄 **请求生命周期跟踪**: 实现RequestLifecycleTracker，监控请求各个阶段（发送、接收、解析、完成）
+- ⏱️ **超时处理优化**: 改进超时处理逻辑，避免将已成功完成的请求标记为超时
+- 📊 **响应恢复机制**: 添加响应恢复机制，即使在类型转换错误的情况下也能尝试恢复响应数据
+- 📝 **日志系统增强**: 改进日志系统，记录详细的请求/响应信息和性能指标
+- 🧪 **测试框架改进**: 增强测试框架，使用模拟数据和灵活断言提高测试稳定性
+- 🔒 **类型系统优化**: 改进泛型处理，减少类型转换错误
+
+### v1.0.3 更新
 
 - 🔒 **并发安全增强**: 细化锁粒度，将全局锁拆分为多个专用锁，减少锁竞争，提高并发吞吐量
 - 🚀 **队列管理优化**: 使用高效的优先级队列替代多队列实现，提高处理效率
@@ -42,6 +52,8 @@
 - 🛡️ **类型安全**: 完整的 TypeScript 风格类型定义
 - 📱 **移动优化**: 针对移动网络环境优化
 - 🔐 **安全可靠**: 支持证书锁定和请求签名
+- 🔍 **全面错误处理**: 统一错误处理机制，支持针对不同HTTP状态码的自定义错误处理
+- 📝 **详细日志**: 增强的日志系统，记录请求/响应详情和性能指标
 
 ## 🚀 快速开始
 
@@ -65,59 +77,26 @@ flutter pub get
 
 ### 基础配置
 
-#### 方式一：使用配置预设（推荐）
-
 ```dart
 import 'package:bzy_network_framework/bzy_network_framework.dart';
 
 void main() async {
-  // 使用开发环境预设
-  NetworkConfig.instance.initializeFromPreset('development');
-  
-  // 或使用生产环境预设
-  // NetworkConfig.instance.initializeFromPreset('production');
-  
-  // 设置基础URL
-  NetworkConfig.instance.updateBaseUrl('https://api.example.com');
-  
-  // 初始化框架
-  await UnifiedNetworkFramework.initialize();
-  
-  runApp(MyApp());
-}
-```
-
-#### 可用的配置预设
-
-- `development`: 开发环境（连接15s，缓存5分钟，启用日志）
-- `production`: 生产环境（连接15s，缓存15分钟，禁用日志）
-- `testing`: 测试环境（连接10s，禁用缓存）
-- `fastResponse`: 快速响应（连接5s，接收10s）
-- `heavyLoad`: 重负载（连接30s，接收60s，重试5次）
-- `offlineFirst`: 离线优先（长缓存，多重试）
-- `lowBandwidth`: 低带宽（短超时，启用缓存）
-
-#### 方式二：手动配置
-
-```dart
-import 'package:bzy_network_framework/bzy_network_framework.dart';
-
-void main() async {
-  // 手动初始化配置
-  NetworkConfig.instance.initialize(
+  // 初始化 BZY 网络框架
+  await UnifiedNetworkFramework.instance.initialize(
     baseUrl: 'https://api.example.com',
-    connectTimeout: 15000,  // 15秒
-    receiveTimeout: 30000,  // 30秒
-    sendTimeout: 30000,     // 30秒
-    enableLogging: true,
-    enableCache: true,
-    defaultCacheDuration: 300,  // 5分钟
-    maxRetries: 3,
-    enableExponentialBackoff: true,  // 启用指数退避
+    config: {
+      'connectTimeout': 100000,
+      'receiveTimeout': 100000,
+      'enableLogging': true,
+      'enableCache': true,
+      'environment': Environment.development,
+    },
+    plugins: [
+      NetworkPluginFactory.createCachePlugin(),
+      NetworkPluginFactory.createRetryPlugin(),
+      NetworkPluginFactory.createLoggingPlugin(),
+    ],
   );
-  
-  // 初始化框架
-  await UnifiedNetworkFramework.initialize();
   
   runApp(MyApp());
 }
@@ -178,168 +157,64 @@ class GetUserRequest extends BaseNetworkRequest<User> {
   String get path => '/users/$userId';
   
   @override
-  User parseResponse(Map<String, dynamic> json) {
-    return User.fromJson(json['data']);
+  User parseResponse(dynamic data) {
+    if (data is String) {
+      final jsonData = json.decode(data) as Map<String, dynamic>;
+      return User.fromJson(jsonData['data']);
+    }
+    return User.fromJson((data as Map<String, dynamic>)['data']);
   }
-}
-
-// 获取用户列表
-class GetUsersRequest extends BaseNetworkRequest<List<User>> {
-  final int page;
-  final int limit;
-  
-  GetUsersRequest({this.page = 1, this.limit = 20});
   
   @override
-  HttpMethod get method => HttpMethod.get;
-  
-  @override
-  String get path => '/users';
-  
-  @override
-  Map<String, dynamic> get queryParameters => {
-    'page': page,
-    'limit': limit,
-  };
-  
-  @override
-  List<User> parseResponse(Map<String, dynamic> json) {
-    final List<dynamic> data = json['data'];
-    return data.map((item) => User.fromJson(item)).toList();
+  NetworkException? handleError(DioException error) {
+    if (error.response?.statusCode == 403) {
+      return NetworkException(
+        message: '访问被拒绝',
+        statusCode: 403,
+        errorCode: 'ACCESS_DENIED',
+      );
+    }
+    return null; // 让框架处理其他错误
   }
 }
 ```
 
-#### 3. POST 请求
-
-```dart
-// 创建用户
-class CreateUserRequest extends BaseNetworkRequest<User> {
-  final String name;
-  final String email;
-  
-  CreateUserRequest({required this.name, required this.email});
-  
-  @override
-  HttpMethod get method => HttpMethod.post;
-  
-  @override
-  String get path => '/users';
-  
-  @override
-  Map<String, dynamic> get data => {
-    'name': name,
-    'email': email,
-  };
-  
-  @override
-  User parseResponse(Map<String, dynamic> json) {
-    return User.fromJson(json['data']);
-  }
-}
-```
-
-#### 4. PUT/PATCH 请求
-
-```dart
-// 更新用户信息
-class UpdateUserRequest extends BaseNetworkRequest<User> {
-  final String userId;
-  final String? name;
-  final String? email;
-  
-  UpdateUserRequest({
-    required this.userId,
-    this.name,
-    this.email,
-  });
-  
-  @override
-  HttpMethod get method => HttpMethod.put;
-  
-  @override
-  String get path => '/users/$userId';
-  
-  @override
-  Map<String, dynamic> get data => {
-    if (name != null) 'name': name,
-    if (email != null) 'email': email,
-  };
-  
-  @override
-  User parseResponse(Map<String, dynamic> json) {
-    return User.fromJson(json['data']);
-  }
-}
-```
-
-#### 5. DELETE 请求
-
-```dart
-// 删除用户
-class DeleteUserRequest extends BaseNetworkRequest<bool> {
-  final String userId;
-  
-  DeleteUserRequest(this.userId);
-  
-  @override
-  HttpMethod get method => HttpMethod.delete;
-  
-  @override
-  String get path => '/users/$userId';
-  
-  @override
-  bool parseResponse(Map<String, dynamic> json) {
-    return json['success'] ?? false;
-  }
-}
-```
-
-#### 6. 执行请求
+#### 3. 执行请求
 
 ```dart
 // 基础请求执行
 final getUserRequest = GetUserRequest('123');
-final response = await UnifiedNetworkFramework.instance.execute(getUserRequest);
 
-if (response.isSuccess) {
-  final user = response.data;
-  print('用户名: ${user?.name}');
-} else {
-  print('请求失败: ${response.message}');
-  print('错误代码: ${response.statusCode}');
-}
-
-// 带错误处理的请求
-try {
-  final createRequest = CreateUserRequest(
-    name: '张三',
-    email: 'zhangsan@example.com',
-  );
-  
-  final result = await UnifiedNetworkFramework.instance.execute(createRequest);
-  
-  if (result.isSuccess) {
-    print('用户创建成功: ${result.data?.name}');
+// 使用 .then() 方式调用并处理错误
+NetworkExecutor.instance.execute(getUserRequest).then((response) {
+  // 检查状态码
+  if (response.statusCode == 200) {
+    final user = response.data;
+    print('用户名: ${user?.name}');
   } else {
-    // 处理业务错误
-    switch (result.statusCode) {
-      case 400:
-        print('请求参数错误');
-        break;
-      case 401:
-        print('未授权，请重新登录');
-        break;
-      case 409:
-        print('用户已存在');
-        break;
-      default:
-        print('创建失败: ${result.message}');
-    }
+    print('请求失败: ${response.message}');
+    print('错误代码: ${response.statusCode}');
+  }
+}).catchError((e) {
+  // 处理网络异常
+  if (e is NetworkException) {
+    print('网络错误: ${e.message}, 状态码: ${e.statusCode}');
+  } else {
+    print('未知错误: $e');
+  }
+});
+
+// 使用 async/await 和 try-catch
+try {
+  final response = await NetworkExecutor.instance.execute(getUserRequest);
+  
+  if (response.isSuccess) {
+    print('用户名: ${response.data?.name}');
+  } else {
+    print('请求失败: ${response.message}');
   }
 } catch (e) {
-  // 处理网络异常
-  print('网络异常: $e');
+  print('错误: $e');
 }
 ```
 
@@ -348,8 +223,9 @@ try {
 - [快速开始指南](doc/docs/QUICK_START_GUIDE.md)
 - [高级功能](doc/docs/ADVANCED_FEATURES.md)
 - [API 文档](doc/docs/API_REFERENCE.md)
-- [最佳实践](doc/ocs/BEST_PRACTICES.md)
+- [最佳实践](doc/docs/BEST_PRACTICES.md)
 - [迁移指南](doc/docs/MIGRATION_GUIDE.md)
+- [改进建议](BZY网络框架改进建议.md)
 
 ## 🏗️ 架构
 
@@ -366,9 +242,76 @@ BZY 网络框架
 
 ## 🔧 高级功能
 
-### 文件上传
+### 错误处理
 
-#### 1. 单文件上传
+```dart
+class CustomErrorRequest extends BaseNetworkRequest<Map<String, dynamic>> {
+  @override
+  HttpMethod get method => HttpMethod.get;
+  
+  @override
+  String get path => '/api/endpoint';
+  
+  @override
+  Map<String, dynamic> parseResponse(dynamic data) {
+    if (data is String) {
+      return json.decode(data) as Map<String, dynamic>;
+    }
+    return data as Map<String, dynamic>;
+  }
+  
+  @override
+  NetworkException? handleError(DioException error) {
+    // 根据状态码自定义错误处理
+    if (error.response?.statusCode == 400) {
+      return NetworkException(
+        message: '请求参数无效',
+        statusCode: 400,
+        errorCode: 'INVALID_PARAMETERS',
+      );
+    } else if (error.response?.statusCode == 401) {
+      return NetworkException(
+        message: '未授权，请重新登录',
+        statusCode: 401,
+        errorCode: 'UNAUTHORIZED',
+      );
+    } else if (error.response?.statusCode == 403) {
+      return NetworkException(
+        message: '访问被拒绝',
+        statusCode: 403,
+        errorCode: 'ACCESS_DENIED',
+      );
+    } else if (error.response?.statusCode == 404) {
+      return NetworkException(
+        message: '资源不存在',
+        statusCode: 404,
+        errorCode: 'RESOURCE_NOT_FOUND',
+      );
+    } else if (error.response?.statusCode == 429) {
+      return NetworkException(
+        message: '请求过于频繁，请稍后再试',
+        statusCode: 429,
+        errorCode: 'RATE_LIMITED',
+      );
+    } else if (error.response?.statusCode == 500) {
+      return NetworkException(
+        message: '服务器错误，请稍后再试',
+        statusCode: 500,
+        errorCode: 'SERVER_ERROR',
+      );
+    }
+    
+    // 默认错误处理
+    return NetworkException(
+      message: error.message ?? '未知错误',
+      statusCode: error.response?.statusCode ?? -1,
+      errorCode: 'UNKNOWN_ERROR',
+    );
+  }
+}
+```
+
+### 文件上传
 
 ```dart
 class UploadAvatarRequest extends UploadRequest<UploadResult> {
@@ -395,56 +338,41 @@ class UploadAvatarRequest extends UploadRequest<UploadResult> {
   };
   
   @override
-  UploadResult parseResponse(Map<String, dynamic> json) {
-    return UploadResult.fromJson(json['data']);
+  UploadResult parseResponse(dynamic data) {
+    if (data is String) {
+      final jsonData = json.decode(data) as Map<String, dynamic>;
+      return UploadResult.fromJson(jsonData['data']);
+    }
+    return UploadResult.fromJson((data as Map<String, dynamic>)['data']);
   }
-}
-
-// 执行上传
-final uploadRequest = UploadAvatarRequest(imageFile, '123');
-final result = await UnifiedNetworkFramework.instance.execute(uploadRequest);
-
-if (result.isSuccess) {
-  print('上传成功: ${result.data?.url}');
 }
 ```
 
-#### 2. 多文件上传
+### 文件下载
 
 ```dart
-class UploadMultipleFilesRequest extends UploadRequest<List<UploadResult>> {
-  final List<File> files;
-  final String albumId;
+class DownloadFileRequest extends DownloadRequest {
+  final String fileId;
+  final String savePath;
   
-  UploadMultipleFilesRequest(this.files, this.albumId);
-  
-  @override
-  String get path => '/albums/$albumId/photos';
+  DownloadFileRequest(this.fileId, this.savePath);
   
   @override
-  Map<String, dynamic> get files {
-    final Map<String, dynamic> fileMap = {};
-    for (int i = 0; i < files.length; i++) {
-      fileMap['photo_$i'] = MultipartFile.fromFileSync(
-        files[i].path,
-        filename: 'photo_$i.jpg',
-      );
-    }
-    return fileMap;
-  }
+  String get path => '/files/$fileId/download';
   
   @override
-  List<UploadResult> parseResponse(Map<String, dynamic> json) {
-    final List<dynamic> data = json['data'];
-    return data.map((item) => UploadResult.fromJson(item)).toList();
+  String get downloadPath => savePath;
+  
+  @override
+  void onProgress(int received, int total) {
+    final progress = (received / total * 100).toStringAsFixed(1);
+    print('下载进度: $progress%');
   }
 }
 ```
 
 ### 批量请求
 
-#### 1. 顺序执行
-
 ```dart
 final requests = [
   GetUserRequest('1'),
@@ -452,29 +380,7 @@ final requests = [
   GetUserRequest('3'),
 ];
 
-// 顺序执行，一个接一个
-final responses = await UnifiedNetworkFramework.instance.executeBatch(
-  requests,
-  sequential: true,
-);
-
-for (int i = 0; i < responses.length; i++) {
-  if (responses[i].isSuccess) {
-    print('用户 ${i + 1}: ${responses[i].data?.name}');
-  }
-}
-```
-
-#### 2. 并发执行
-
-```dart
-final requests = [
-  GetUserRequest('1'),
-  GetUserRequest('2'),
-  GetUserRequest('3'),
-];
-
-// 并发执行，同时进行
+// 并发执行
 final responses = await UnifiedNetworkFramework.instance.executeBatch(
   requests,
   sequential: false,
@@ -486,61 +392,7 @@ final successCount = responses.where((r) => r.isSuccess).length;
 print('成功请求数: $successCount/${responses.length}');
 ```
 
-### 文件下载
-
-```dart
-class DownloadFileRequest extends DownloadRequest<DownloadResponse> {
-  final String fileUrl;
-  final String localPath;
-  
-  DownloadFileRequest({
-    required this.fileUrl,
-    required this.localPath,
-  });
-  
-  @override
-  String get path => fileUrl;
-  
-  @override
-  String get savePath => localPath;
-  
-  @override
-  void Function(int received, int total)? get onProgress => (received, total) {
-    final progress = (received / total * 100).toStringAsFixed(1);
-    print('下载进度: $progress%');
-  };
-  
-  @override
-  DownloadResponse parseResponse(dynamic data) {
-    return DownloadResponse.fromJson(data);
-  }
-  
-  @override
-  void onDownloadComplete(String filePath) {
-    print('文件下载完成: $filePath');
-  }
-  
-  @override
-  void onDownloadError(String error) {
-    print('文件下载失败: $error');
-  }
-}
-
-// 使用示例
-final downloadRequest = DownloadFileRequest(
-  fileUrl: '/files/document.pdf',
-  localPath: '/path/to/local/document.pdf',
-);
-
-final response = await UnifiedNetworkFramework.instance.execute(downloadRequest);
-if (response.isSuccess) {
-  print('文件下载成功: ${response.data?.filePath}');
-}
-```
-
 ### 自定义拦截器
-
-#### 1. 认证拦截器
 
 ```dart
 class AuthInterceptor extends Interceptor {
@@ -568,104 +420,6 @@ class AuthInterceptor extends Interceptor {
     handler.next(err);
   }
 }
-
-// 注册拦截器
-final authInterceptor = AuthInterceptor();
-UnifiedNetworkFramework.instance.addInterceptor(authInterceptor);
-
-// 设置 token
-authInterceptor.setToken('your_access_token');
-```
-
-#### 2. 日志拦截器
-
-```dart
-class CustomLogInterceptor extends Interceptor {
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    print('🚀 请求: ${options.method} ${options.uri}');
-    print('📤 请求头: ${options.headers}');
-    if (options.data != null) {
-      print('📦 请求体: ${options.data}');
-    }
-    handler.next(options);
-  }
-  
-  @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
-    print('✅ 响应: ${response.statusCode} ${response.requestOptions.uri}');
-    print('📥 响应数据: ${response.data}');
-    handler.next(response);
-  }
-  
-  @override
-  void onError(DioException err, ErrorInterceptorHandler handler) {
-    print('❌ 错误: ${err.message}');
-    print('🔍 请求: ${err.requestOptions.uri}');
-    handler.next(err);
-  }
-}
-```
-
-#### 3. 缓存拦截器
-
-```dart
-class CacheInterceptor extends Interceptor {
-  final Map<String, CacheItem> _cache = {};
-  final Duration cacheDuration;
-  
-  CacheInterceptor({this.cacheDuration = const Duration(minutes: 5)});
-  
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    // 只缓存 GET 请求
-    if (options.method.toUpperCase() == 'GET') {
-      final cacheKey = _generateCacheKey(options);
-      final cacheItem = _cache[cacheKey];
-      
-      if (cacheItem != null && !cacheItem.isExpired) {
-        // 返回缓存数据
-        final response = Response(
-          requestOptions: options,
-          data: cacheItem.data,
-          statusCode: 200,
-        );
-        handler.resolve(response);
-        return;
-      }
-    }
-    
-    handler.next(options);
-  }
-  
-  @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
-    // 缓存成功的 GET 响应
-    if (response.requestOptions.method.toUpperCase() == 'GET' && 
-        response.statusCode == 200) {
-      final cacheKey = _generateCacheKey(response.requestOptions);
-      _cache[cacheKey] = CacheItem(
-        data: response.data,
-        expireTime: DateTime.now().add(cacheDuration),
-      );
-    }
-    
-    handler.next(response);
-  }
-  
-  String _generateCacheKey(RequestOptions options) {
-    return '${options.method}_${options.uri}';
-  }
-}
-
-class CacheItem {
-  final dynamic data;
-  final DateTime expireTime;
-  
-  CacheItem({required this.data, required this.expireTime});
-  
-  bool get isExpired => DateTime.now().isAfter(expireTime);
-}
 ```
 
 ## 📊 性能监控
@@ -682,7 +436,7 @@ print('缓存命中率: ${stats.cacheHitRate}%');
 
 ## 🚧 开发状态
 
-### 第一阶段（Q1-Q2）：智能化基础 - 进行中
+### 第一阶段（Q1-Q2）：智能化基础 - 已完成
 
 **已完成功能**：
 - ✅ 核心网络框架架构
@@ -691,6 +445,12 @@ print('缓存命中率: ${stats.cacheHitRate}%');
 - ✅ 基础拦截器系统
 - ✅ 简单缓存机制
 - ✅ 基础配置管理
+- ✅ 错误处理优化
+- ✅ 请求生命周期跟踪
+- ✅ 响应恢复机制
+- ✅ 增强日志系统
+
+### 第二阶段（Q3-Q4）：高级功能 - 进行中
 
 **正在开发**：
 - 🔄 自适应网络策略（网络质量检测、自适应超时/重试策略）
@@ -699,19 +459,19 @@ print('缓存命中率: ${stats.cacheHitRate}%');
 - 🔄 智能请求调度（优先级队列、依赖管理、负载均衡）
 - 🔄 网络安全增强（证书锁定、请求签名、数据加密）
 - 🔄 配置热更新（远程配置、A/B测试支持）
-- 🔄 错误处理优化（智能重试、错误分类、用户友好提示）
 
 **需要优化**：
-- 🔧 基础性能监控系统完善
-- 🔧 缓存机制优化
-- 🔧 网络配置管理增强
+- 🔧 类型系统进一步优化
+- 🔧 缓存机制增强
+- 🔧 可配置日志级别
 
 ### 接下来的计划
 
 详细的开发计划和技术实现请参考：
-- [第一阶段开发计划](doc/docs/PHASE_ONE_DEVELOPMENT_PLAN.md)
+- [第二阶段开发计划](doc/docs/PHASE_TWO_DEVELOPMENT_PLAN.md)
 - [高级功能路线图](doc/docs/ADVANCED_FEATURES.md)
 - [项目概览](doc/docs/PROJECT_OVERVIEW.md)
+- [改进建议](BZY网络框架改进建议.md)
 
 ## 🤝 贡献
 
