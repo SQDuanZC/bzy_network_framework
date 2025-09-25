@@ -34,7 +34,7 @@ void main() {
           retryDelay: 1000,
           enableExponentialBackoff: true,
         );
-
+        
         expect(NetworkConfig.instance.baseUrl, 'https://api.example.com');
         expect(NetworkConfig.instance.connectTimeout, Duration(milliseconds: 5000));
         expect(NetworkConfig.instance.receiveTimeout, Duration(milliseconds: 10000));

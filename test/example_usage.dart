@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'metrics.dart';
+import 'package:bzy_network_framework/src/metrics/metrics.dart';
 
 /// 指标监控使用示例
 /// 
@@ -168,4 +168,4 @@ class QuickIntegrationExample extends StatelessWidget {
       ),
     );
   }
-} 
+}

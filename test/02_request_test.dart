@@ -36,6 +36,7 @@ class TestRequest extends BaseNetworkRequest<Map<String, dynamic>> {
   Map<String, String>? get headers => _headers;
   @override
   Map<String, dynamic> parseResponse(dynamic data) => data as Map<String, dynamic>;
+
 }
 
 void main() {
