@@ -41,40 +41,13 @@ class UnifiedNetworkFramework {
   
   /// Initialize framework
   Future<void> initialize({
-    required String baseUrl,
-    Map<String, dynamic>? config,
     List<NetworkPlugin>? plugins,
     List<GlobalInterceptor>? interceptors,
-  }) async {
-    // 空值检查
-    if (baseUrl == null || baseUrl.isEmpty) {
-      NetworkLogger.framework.warning('框架初始化: baseUrl 为空');
-      throw ArgumentError('baseUrl cannot be null or empty');
-    }
-    
+  }) async {  
     if (_isInitialized) {
       throw StateError('UnifiedNetworkFramework is already initialized');
     }
-    
-    // Initialize network configuration
-    NetworkConfig.instance.initialize(
-      baseUrl: baseUrl,
-      connectTimeout: config?['connectTimeout'],
-      receiveTimeout: config?['receiveTimeout'],
-      sendTimeout: config?['sendTimeout'],
-      defaultHeaders: config?['defaultHeaders'],
-      maxRetries: config?['maxRetries'],
-      retryDelay: config?['retryDelay'],
-      enableLogging: config?['enableLogging'],
-      logLevel: config?['logLevel'],
-      enableCache: config?['enableCache'],
-      defaultCacheDuration: config?['defaultCacheDuration'],
-      maxCacheSize: config?['maxCacheSize'],
-      environment: config?['environment'],
-      authToken: config?['authToken'],
-      userAgent: config?['userAgent'],
-    );
-    
+
     // Register plugins
     if (plugins != null) {
       for (final plugin in plugins) {
