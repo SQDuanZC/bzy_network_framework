@@ -188,32 +188,42 @@ if (batchRequest.isAllSuccess) {
 ### 4. 文件下载
 
 ```dart
-// 使用 SimpleDownloadRequest
-final downloadRequest = SimpleDownloadRequest(
+// 创建自定义下载请求类
+class MyDownloadRequest extends DownloadRequest<String> {
+  MyDownloadRequest({
+    required String path,
+    required String savePath,
+    Function(int, int)? onProgress,
+  }) : super(
+    path: path,
+    savePath: savePath,
+    onProgress: onProgress,
+  );
+
+  @override
+  String parseResponse(dynamic response) {
+    return savePath; // 返回保存路径
+  }
+}
+
+// 使用下载请求
+final downloadRequest = MyDownloadRequest(
   path: '/api/files/document.pdf',
   savePath: '/tmp/document.pdf',
-  onReceiveProgress: (received, total) {
+  onProgress: (received, total) {
     final progress = (received / total * 100).toStringAsFixed(1);
     print('下载进度: $progress%');
   },
-  deleteOnError: true,
 );
 
 try {
-  final filePath = await downloadRequest.download();
-  print('文件下载成功: $filePath');
+  final response = await NetworkExecutor.instance.execute(downloadRequest);
+  if (response.isSuccess) {
+    print('文件下载成功: ${response.data}');
+  }
 } catch (e) {
   print('下载失败: $e');
 }
-
-// 或者直接使用 NetworkManager
-final response = await NetworkManager.instance.download(
-  'https://example.com/file.zip',
-  '/tmp/file.zip',
-  onReceiveProgress: (received, total) {
-    print('进度: ${(received / total * 100).toInt()}%');
-  },
-);
 ```
 
 ### 5. 链式请求
@@ -344,21 +354,33 @@ final request = SimplePostRequest<User>(
 
 ### 从传统方式迁移
 
-**传统方式:**
+**面向对象架构:**
 ```dart
-final response = await NetworkManager.instance.get<User>(
-  '/api/users/123',
-  parser: (json) => User.fromJson(json),
-);
-```
+// 创建自定义GET请求类
+class UserGetRequest extends BaseNetworkRequest<User> {
+  final String userId;
+  
+  UserGetRequest(this.userId);
+  
+  @override
+  String get path => '/api/users/$userId';
+  
+  @override
+  String get method => 'GET';
+  
+  @override
+  User parseResponse(dynamic response) {
+    return User.fromJson(response);
+  }
+}
 
-**新架构:**
-```dart
-final request = SimpleGetRequest<User>(
-  path: '/api/users/123',
-  parseResponse: (json) => User.fromJson(json),
-);
-final response = await RequestManager.instance.execute(request);
+// 使用请求
+final request = UserGetRequest('123');
+final response = await NetworkExecutor.instance.execute(request);
+if (response.isSuccess) {
+  final user = response.data;
+  print('用户名: ${user.name}');
+}
 ```
 
 ### 渐进式迁移

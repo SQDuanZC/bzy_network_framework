@@ -40,7 +40,7 @@ class NetworkAdapterConfig {
   /// 网络质量检测间隔
   final Duration qualityCheckInterval;
 
-  const NetworkAdapterConfig({
+  NetworkAdapterConfig({
     this.networkCheckTimeout = const Duration(seconds: 5),
     this.maxWaitTime = const Duration(seconds: 30),
     this.maxRetryAttempts = 3,
@@ -48,7 +48,11 @@ class NetworkAdapterConfig {
     this.defaultStrategy = NetworkAdaptationStrategy.autoRetry,
     this.enableNetworkQualityCheck = true,
     this.qualityCheckInterval = const Duration(minutes: 1),
-  });
+  }) : assert(networkCheckTimeout.inMilliseconds > 0, 'networkCheckTimeout must be positive'),
+       assert(maxWaitTime.inMilliseconds > 0, 'maxWaitTime must be positive'),
+       assert(maxRetryAttempts >= 0, 'maxRetryAttempts must be non-negative'),
+       assert(retryInterval.inMilliseconds >= 0, 'retryInterval must be non-negative'),
+       assert(qualityCheckInterval.inMilliseconds > 0, 'qualityCheckInterval must be positive');
 }
 
 /// 网络质量信息
@@ -89,7 +93,7 @@ class NetworkAdapter {
   final Logger _logger = Logger('NetworkAdapter');
   final NetworkConnectivityMonitor _connectivityMonitor = NetworkConnectivityMonitor.instance;
   
-  NetworkAdapterConfig _config = const NetworkAdapterConfig();
+  NetworkAdapterConfig _config = NetworkAdapterConfig();
   NetworkQuality? _lastQuality;
   Timer? _qualityCheckTimer;
   bool _isInitialized = false;

@@ -36,14 +36,14 @@ void main() {
         );
         
         expect(NetworkConfig.instance.baseUrl, 'https://api.example.com');
-        expect(NetworkConfig.instance.connectTimeout, Duration(milliseconds: 5000));
-        expect(NetworkConfig.instance.receiveTimeout, Duration(milliseconds: 10000));
-        expect(NetworkConfig.instance.sendTimeout, Duration(milliseconds: 5000));
+        expect(NetworkConfig.instance.connectTimeout, 5000);
+        expect(NetworkConfig.instance.receiveTimeout, 10000);
+        expect(NetworkConfig.instance.sendTimeout, 5000);
         expect(NetworkConfig.instance.enableLogging, true);
         expect(NetworkConfig.instance.enableCache, true);
         expect(NetworkConfig.instance.defaultCacheDuration, 300);
         expect(NetworkConfig.instance.maxRetries, 3);
-        expect(NetworkConfig.instance.retryDelay, Duration(milliseconds: 1000));
+        expect(NetworkConfig.instance.retryDelay, 1000);
         expect(NetworkConfig.instance.enableExponentialBackoff, true);
       });
 
@@ -53,14 +53,14 @@ void main() {
         );
         
         expect(NetworkConfig.instance.baseUrl, 'https://api.example.com');
-        expect(NetworkConfig.instance.connectTimeout, isA<Duration>());
-        expect(NetworkConfig.instance.receiveTimeout, isA<Duration>());
-        expect(NetworkConfig.instance.sendTimeout, isA<Duration>());
+        expect(NetworkConfig.instance.connectTimeout, isA<int>());
+        expect(NetworkConfig.instance.receiveTimeout, isA<int>());
+        expect(NetworkConfig.instance.sendTimeout, isA<int>());
         expect(NetworkConfig.instance.enableLogging, isA<bool>());
         expect(NetworkConfig.instance.enableCache, isA<bool>());
         expect(NetworkConfig.instance.defaultCacheDuration, isA<int>());
         expect(NetworkConfig.instance.maxRetries, isA<int>());
-        expect(NetworkConfig.instance.retryDelay, isA<Duration>());
+        expect(NetworkConfig.instance.retryDelay, isA<int>());
         expect(NetworkConfig.instance.enableExponentialBackoff, isA<bool>());
       });
     });
@@ -124,6 +124,8 @@ void main() {
       test('无效URL配置', () {
         expect(() {
           NetworkConfig.instance.initialize(baseUrl: '');
+          final validator = NetworkConfigValidator();
+          validator.validateAndThrow(NetworkConfig.instance);
         }, throwsA(isA<Exception>()));
       });
 
@@ -133,7 +135,8 @@ void main() {
             baseUrl: 'https://api.example.com',
             connectTimeout: -1000,
           );
-        }, throwsA(isA<Exception>()));
+          NetworkConfig.instance.validateConfig();
+        }, throwsA(isA<ArgumentError>()));
       });
 
       test('无效重试配置', () {
@@ -142,7 +145,8 @@ void main() {
             baseUrl: 'https://api.example.com',
             maxRetries: -1,
           );
-        }, throwsA(isA<Exception>()));
+          NetworkConfig.instance.validateConfig();
+        }, throwsA(isA<ArgumentError>()));
       });
     });
 
@@ -229,4 +233,4 @@ void main() {
       });
     });
   });
-} 
+}

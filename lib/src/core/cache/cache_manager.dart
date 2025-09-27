@@ -534,6 +534,277 @@ class CacheManager {
     _startPeriodicCleanup();
   }
   
+  // ==================== 简化接口方法 ====================
+  
+  /// 直接保存对象数据（简化接口）
+  /// 
+  /// 这个方法允许直接保存任何类型的数据，无需包装成BaseResponse
+  /// 
+  /// [key] 缓存键
+  /// [data] 要缓存的数据，可以是任何类型
+  /// [expiry] 过期时间，默认使用配置中的默认过期时间
+  /// [tags] 标签集合，用于批量管理
+  /// [enableCompression] 是否启用压缩，默认根据配置决定
+  /// [enableEncryption] 是否启用加密，默认根据配置决定
+  Future<void> putObject<T>(
+    String key,
+    T data, {
+    Duration? expiry,
+    Set<String> tags = const {},
+    bool? enableCompression,
+    bool? enableEncryption,
+  }) async {
+    // 将数据包装成BaseResponse格式
+    final response = BaseResponse<T>.success(data: data);
+    
+    await set<T>(
+      key,
+      response,
+      expiry: expiry,
+      tags: tags,
+      enableCompression: enableCompression,
+      enableEncryption: enableEncryption,
+    );
+  }
+  
+  /// 直接获取对象数据（简化接口）
+  /// 
+  /// 这个方法直接返回缓存的数据，而不是BaseResponse包装
+  /// 
+  /// [key] 缓存键
+  /// [fromJson] 可选的反序列化函数，用于复杂对象
+  /// 
+  /// 返回缓存的数据，如果不存在或已过期则返回null
+  Future<T?> getObject<T>(
+    String key, {
+    T Function(dynamic)? fromJson,
+  }) async {
+    final response = await get<T>(key, fromJson: fromJson);
+    return response?.data;
+  }
+  
+  /// 保存字符串（简化接口）
+  Future<void> putString(
+    String key,
+    String value, {
+    Duration? expiry,
+    Set<String> tags = const {},
+  }) async {
+    await putObject<String>(key, value, expiry: expiry, tags: tags);
+  }
+  
+  /// 获取字符串（简化接口）
+  Future<String?> getString(String key) async {
+    return await getObject<String>(key);
+  }
+  
+  /// 保存整数（简化接口）
+  Future<void> putInt(
+    String key,
+    int value, {
+    Duration? expiry,
+    Set<String> tags = const {},
+  }) async {
+    await putObject<int>(key, value, expiry: expiry, tags: tags);
+  }
+  
+  /// 获取整数（简化接口）
+  Future<int?> getInt(String key) async {
+    return await getObject<int>(key);
+  }
+  
+  /// 保存双精度浮点数（简化接口）
+  Future<void> putDouble(
+    String key,
+    double value, {
+    Duration? expiry,
+    Set<String> tags = const {},
+  }) async {
+    await putObject<double>(key, value, expiry: expiry, tags: tags);
+  }
+  
+  /// 获取双精度浮点数（简化接口）
+  Future<double?> getDouble(String key) async {
+    return await getObject<double>(key);
+  }
+  
+  /// 保存布尔值（简化接口）
+  Future<void> putBool(
+    String key,
+    bool value, {
+    Duration? expiry,
+    Set<String> tags = const {},
+  }) async {
+    await putObject<bool>(key, value, expiry: expiry, tags: tags);
+  }
+  
+  /// 获取布尔值（简化接口）
+  Future<bool?> getBool(String key) async {
+    return await getObject<bool>(key);
+  }
+  
+  /// 保存Map对象（简化接口）
+  Future<void> putMap(
+    String key,
+    Map<String, dynamic> value, {
+    Duration? expiry,
+    Set<String> tags = const {},
+    bool? enableCompression,
+  }) async {
+    await putObject<Map<String, dynamic>>(
+      key, 
+      value, 
+      expiry: expiry, 
+      tags: tags,
+      enableCompression: enableCompression,
+    );
+  }
+  
+  /// 获取Map对象（简化接口）
+  Future<Map<String, dynamic>?> getMap(String key) async {
+    return await getObject<Map<String, dynamic>>(key);
+  }
+  
+  /// 保存List对象（简化接口）
+  Future<void> putList<T>(
+    String key,
+    List<T> value, {
+    Duration? expiry,
+    Set<String> tags = const {},
+    bool? enableCompression,
+  }) async {
+    await putObject<List<T>>(
+      key, 
+      value, 
+      expiry: expiry, 
+      tags: tags,
+      enableCompression: enableCompression,
+    );
+  }
+  
+  /// 获取List对象（简化接口）
+  Future<List<T>?> getList<T>(String key) async {
+    return await getObject<List<T>>(key);
+  }
+  
+  /// 保存JSON序列化对象（简化接口）
+  /// 
+  /// 适用于实现了toJson()方法的自定义对象
+  /// 
+  /// [key] 缓存键
+  /// [value] 要缓存的对象，必须实现toJson()方法
+  /// [fromJson] 反序列化函数，用于从JSON恢复对象
+  /// [expiry] 过期时间
+  /// [tags] 标签集合
+  Future<void> putJsonObject<T>(
+    String key,
+    T value,
+    T Function(Map<String, dynamic>) fromJson, {
+    Duration? expiry,
+    Set<String> tags = const {},
+    bool? enableCompression,
+  }) async {
+    // 将对象序列化为Map
+    Map<String, dynamic> jsonMap;
+    if (value is Map<String, dynamic>) {
+      jsonMap = value;
+    } else {
+      // 假设对象有toJson方法
+      try {
+        jsonMap = (value as dynamic).toJson() as Map<String, dynamic>;
+      } catch (e) {
+        throw ArgumentError('Object must implement toJson() method or be a Map<String, dynamic>');
+      }
+    }
+    
+    await putMap(
+      key, 
+      jsonMap, 
+      expiry: expiry, 
+      tags: tags,
+      enableCompression: enableCompression,
+    );
+  }
+  
+  /// 获取JSON序列化对象（简化接口）
+  Future<T?> getJsonObject<T>(
+    String key,
+    T Function(Map<String, dynamic>) fromJson,
+  ) async {
+    final jsonMap = await getMap(key);
+    if (jsonMap != null) {
+      try {
+        return fromJson(jsonMap);
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('反序列化对象失败: $e');
+        }
+        return null;
+      }
+    }
+    return null;
+  }
+  
+  /// 检查缓存是否存在（简化接口）
+  Future<bool> exists(String key) async {
+    final data = await getObject(key);
+    return data != null;
+  }
+  
+  /// 获取缓存的过期时间（简化接口）
+  Future<DateTime?> getExpiryTime(String key) async {
+    final entry = await _memoryOperationLock.synchronized(() {
+      return _memoryCache[key];
+    });
+    
+    if (entry != null) {
+      return entry.expiryTime;
+    }
+    
+    // 如果内存中没有，尝试从磁盘获取
+    if (_config.enableDiskCache) {
+      final diskEntry = await _getDiskCache(key);
+      return diskEntry?.expiryTime;
+    }
+    
+    return null;
+  }
+  
+  /// 延长缓存过期时间（简化接口）
+  Future<bool> extendExpiry(String key, Duration extension) async {
+    final entry = await _memoryOperationLock.synchronized(() {
+      return _memoryCache[key];
+    });
+    
+    if (entry != null) {
+      final newExpiryTime = entry.expiryTime.add(extension);
+      final updatedEntry = CacheEntry(
+        key: entry.key,
+        data: entry.data,
+        expiryTime: newExpiryTime,
+        priority: entry.priority,
+        size: entry.size,
+        accessCount: entry.accessCount,
+        lastAccessed: entry.lastAccessed,
+        tags: entry.tags,
+        isCompressed: entry.isCompressed,
+        isEncrypted: entry.isEncrypted,
+      );
+      
+      await _memoryOperationLock.synchronized(() async {
+        _memoryCache[key] = updatedEntry;
+      });
+      
+      // 同时更新磁盘缓存
+      if (_config.enableDiskCache) {
+        await _setDiskCache(key, updatedEntry);
+      }
+      
+      return true;
+    }
+    
+    return false;
+  }
 
 
   /// 销毁缓存管理器
@@ -1295,7 +1566,8 @@ class DiskIOQueue {
     await _lock.synchronized(() async {
       if (_queue.length >= _maxSize) {
         // 等待最旧的操作完成
-        await _queue.removeAt(0);
+        final oldestOperation = _queue.removeAt(0);
+        await oldestOperation;
       }
       _queue.add(operation);
     });

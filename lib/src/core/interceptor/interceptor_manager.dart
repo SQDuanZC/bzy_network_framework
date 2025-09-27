@@ -377,7 +377,8 @@ class InterceptorManager {
       final existingName = _executionOrder[i];
       final existingConfig = _configs[existingName];
       
-      if (existingConfig != null && priority > existingConfig.priority) {
+      // 数值越小优先级越高，所以当新的优先级小于现有优先级时插入
+      if (existingConfig != null && priority < existingConfig.priority) {
         insertIndex = i;
         break;
       }

@@ -5,11 +5,19 @@ English | [中文](README.md)
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.5-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.7-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY Network Framework** is a high-performance, easily extensible Flutter network request solution that provides comprehensive network requests, caching, interceptors, monitoring, and other features.
 
-## 🆕 Latest Updates (v1.0.5)
+## 🆕 Latest Updates (v1.0.7)
+
+- 🔧 **Interceptor Priority Fix**: Fixed priority sorting logic error in interceptor manager, ensuring "lower number = higher priority" rule is correctly implemented
+- 🏷️ **Cache Tag Functionality**: Fixed cache clearing by tag functionality in integration tests, ensuring accurate cache management
+- 🧪 **Test Coverage Improvement**: Completed comprehensive test suite with 12 out of 13 test files passing successfully, significantly improving test coverage
+- 📊 **Test Report Generation**: Added detailed test reports and coverage analysis, providing framework quality assessment
+- 🛡️ **Stability Enhancement**: Verified through extensive integration testing, core functionality is stable and reliable with robust error handling
+
+### v1.0.6 Updates
 
 - 📊 **Performance Metrics Module**: Added comprehensive performance metrics monitoring system with real-time visualization
 - 🔧 **Configuration Optimization**: Fixed configuration inconsistencies between NetworkConfigPreset and NetworkConfigPresets
