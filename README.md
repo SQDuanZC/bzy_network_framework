@@ -5,11 +5,20 @@
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.8-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.9-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY 网络框架** 是一个高性能、易扩展的 Flutter 网络请求解决方案，提供完整的网络请求、缓存、拦截器、监控等功能。
 
-## 🆕 最新更新 (v1.0.8)
+## 🆕 最新更新 (v1.0.9)
+
+- 📁 **Path Provider 集成**: 集成 `path_provider` 插件，提供可靠的跨平台目录访问，改进平台特定目录处理
+- 🔧 **异步目录方法**: 增强 `getCacheDirectory` 和 `getDocumentsDirectory` 方法，完全异步化并具备适当的权限检查
+- 🛡️ **回退机制**: 实现强大的回退策略，当 `path_provider` 失败时确保所有平台的目录访问可靠性
+- 🧪 **测试套件更新**: 更新所有存储相关测试以适配异步目录方法，保持 100% 测试通过率
+- 📦 **依赖管理**: 添加 `path_provider ^2.1.1` 依赖，改进平台目录处理
+- 🔄 **向后兼容**: 在改进底层实现以提高可靠性的同时保持 API 兼容性
+
+### v1.0.8 更新
 
 - 🌐 **跨平台存储完善**: 新增完整的跨平台存储测试套件，支持不同操作系统的缓存目录管理
 - 📁 **平台检测增强**: 实现智能平台检测功能，自动适配 iOS、Android、Windows、macOS、Linux 等平台

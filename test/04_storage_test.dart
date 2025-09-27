@@ -22,7 +22,7 @@ void main() {
     });
 
     test('缓存目录创建测试', () async {
-      final cacheDir = await PlatformUtils.getCacheDirectory();
+      final cacheDir = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
       expect(cacheDir, isNotNull);
       expect(await cacheDir!.exists(), isTrue);
       
@@ -30,7 +30,7 @@ void main() {
     });
 
     test('文档目录创建测试', () async {
-      final docsDir = await PlatformUtils.getDocumentsDirectory();
+      final docsDir = await PlatformUtils.getDocumentsDirectoryWithPermissionCheck();
       expect(docsDir, isNotNull);
       expect(await docsDir!.exists(), isTrue);
       
@@ -38,7 +38,7 @@ void main() {
     });
 
     test('目录权限测试', () async {
-      final cacheDir = await PlatformUtils.getCacheDirectory();
+      final cacheDir = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
       final isWritable = await PlatformUtils.isDirectoryWritable(cacheDir!);
       expect(isWritable, isTrue);
       
@@ -102,7 +102,7 @@ void main() {
     });
 
     test('目录大小计算测试', () async {
-      final cacheDir = await PlatformUtils.getCacheDirectory();
+      final cacheDir = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
       final size = await PlatformUtils.getDirectorySize(cacheDir!);
       expect(size, greaterThanOrEqualTo(0));
       
@@ -110,7 +110,7 @@ void main() {
     });
 
     test('目录清理测试', () async {
-      final testDir = await PlatformUtils.getCacheDirectory();
+      final testDir = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
       final subDir = Directory('${testDir!.path}/test_cleanup');
       
       if (!await subDir.exists()) {
@@ -132,7 +132,7 @@ void main() {
     });
 
     test('磁盘空间检查测试', () async {
-      final cacheDir = await PlatformUtils.getCacheDirectory();
+      final cacheDir = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
       final freeSpace = await PlatformUtils.getAvailableDiskSpace(cacheDir!);
       expect(freeSpace, greaterThan(0));
       
@@ -140,7 +140,7 @@ void main() {
     });
 
     test('文件路径格式兼容性测试', () async {
-      final cacheDir = await PlatformUtils.getCacheDirectory();
+      final cacheDir = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
       final testPath = '${cacheDir!.path}/test/nested/path';
       final testDir = Directory(testPath);
       
@@ -155,7 +155,7 @@ void main() {
     });
 
     test('Unicode文件名测试', () async {
-      final cacheDir = await PlatformUtils.getCacheDirectory();
+      final cacheDir = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
       final unicodeFileName = '测试文件_🚀_test.txt';
       final testFile = File('${cacheDir!.path}/$unicodeFileName');
       
@@ -207,10 +207,10 @@ void main() {
       print('\n=== 平台存储信息 ===');
       print('平台: ${PlatformUtils.platformName}');
       
-      final cacheDir = await PlatformUtils.getCacheDirectory();
+      final cacheDir = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
       print('缓存目录: ${cacheDir?.path}');
       
-      final docsDir = await PlatformUtils.getDocumentsDirectory();
+      final docsDir = await PlatformUtils.getDocumentsDirectoryWithPermissionCheck();
       print('文档目录: ${docsDir?.path}');
       
       if (cacheDir != null) {
@@ -229,8 +229,8 @@ void main() {
     });
 
     test('PlatformStorageInfo测试', () async {
-      final cacheDir = await PlatformUtils.getCacheDirectory();
-      final docsDir = await PlatformUtils.getDocumentsDirectory();
+      final cacheDir = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
+      final docsDir = await PlatformUtils.getDocumentsDirectoryWithPermissionCheck();
       final cacheStructure = await PlatformUtils.createPlatformCacheStructure();
       
       final storageInfo = PlatformStorageInfo(

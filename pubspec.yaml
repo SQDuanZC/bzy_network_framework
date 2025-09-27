@@ -1,6 +1,6 @@
 name: bzy_network_framework
 description: BZY Unified Network Framework - High-performance, easily extensible Flutter network solution
-version: 1.0.8
+version: 1.0.9
 homepage: https://github.com/SQDuanZC/bzy_network_framework
 repository: https://github.com/SQDuanZC/bzy_network_framework
 issue_tracker: https://github.com/SQDuanZC/bzy_network_framework/issues
@@ -22,6 +22,7 @@ dependencies:
   crypto: ^3.0.3
   archive: ^3.4.10
   synchronized: ^3.1.0
+  path_provider: ^2.1.1
 
 dev_dependencies:
   flutter_test:

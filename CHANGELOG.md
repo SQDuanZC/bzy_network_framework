@@ -2,6 +2,27 @@
 
 本文档记录了 BZY 网络框架的所有重要变更。
 
+## [1.0.9] - 2025-1-28
+
+### ✨ 新增功能
+- **Path Provider 集成**: 集成 `path_provider` 插件，提供可靠的跨平台目录访问
+  - 优先使用 `path_provider` 的 `getTemporaryDirectory()` 和 `getApplicationDocumentsDirectory()` 方法
+  - 实现强大的回退机制，当 `path_provider` 失败时自动使用原有的平台特定目录获取逻辑
+  - 确保所有平台的目录访问可靠性和一致性
+
+### 🔧 改进
+- **异步目录方法**: 将 `getCacheDirectory` 和 `getDocumentsDirectory` 方法完全异步化
+  - 添加适当的权限检查和错误处理
+  - 保持 API 兼容性的同时改进底层实现
+- **测试套件更新**: 更新所有存储相关测试以适配异步目录方法
+  - 修改测试用例使用带权限检查的异步方法
+  - 保持 100% 测试通过率
+- **依赖管理**: 添加 `path_provider ^2.1.1` 依赖，改进平台目录处理
+
+### 🐛 修复
+- **ServicesBinding 初始化**: 处理 `path_provider` 在测试环境中的 `ServicesBinding` 未初始化问题
+- **异步调用**: 修复了所有对异步目录方法的调用，确保正确使用 `await` 关键字
+
 ## [1.0.8] - 2025-1-27
 
 ### ✨ 新增功能

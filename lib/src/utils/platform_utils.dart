@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 平台工具类
 /// 提供跨平台的文件系统操作和平台检测功能
@@ -54,6 +55,36 @@ class PlatformUtils {
   /// 是否为Web平台
   static bool get isWeb => currentPlatform == PlatformType.web;
 
+  /// 获取平台特定的主目录
+  static String? _getHomeDirectory() {
+    return Platform.environment['HOME'] ?? 
+           Platform.environment['USERPROFILE'] ??
+           (Platform.environment['HOMEDRIVE'] != null && Platform.environment['HOMEPATH'] != null
+           ? '${Platform.environment['HOMEDRIVE']}${Platform.environment['HOMEPATH']}'
+           : null);
+  }
+
+  /// 安全创建目录
+  static Future<Directory?> _createDirectorySafely(String path) async {
+    try {
+      final directory = Directory(normalizePath(path));
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+      
+      // 检查目录是否可写
+      if (await isDirectoryWritable(directory)) {
+        return directory;
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        print('创建目录失败: $path, 错误: $e');
+      }
+      return null;
+    }
+  }
+
   /// 获取平台特定的缓存目录
   static Future<Directory?> getCacheDirectory() async {
     try {
@@ -64,60 +95,143 @@ class PlatformUtils {
 
       Directory? cacheDir;
       
-      switch (currentPlatform) {
-        case PlatformType.ios:
-        case PlatformType.android:
-        case PlatformType.macos:
-        case PlatformType.windows:
-        case PlatformType.linux:
-          // 所有平台都使用系统临时目录
-          cacheDir = Directory.systemTemp;
-          break;
-        case PlatformType.web:
-        case PlatformType.unknown:
-          return null;
-      }
-
-      if (cacheDir != null) {
+      try {
+        // 使用 path_provider 获取平台特定的缓存目录
+        cacheDir = await getTemporaryDirectory();
         final networkCacheDir = Directory('${cacheDir.path}/network_cache');
         return networkCacheDir;
+      } catch (e) {
+        if (kDebugMode) {
+          print('path_provider 获取缓存目录失败，使用 fallback: $e');
+        }
+        
+        // Fallback to manual platform detection
+        String? cachePath;
+        
+        switch (currentPlatform) {
+          case PlatformType.ios:
+          case PlatformType.macos:
+            // iOS/macOS: ~/Library/Caches/
+            final homeDir = _getHomeDirectory();
+            if (homeDir != null) {
+              cachePath = '$homeDir/Library/Caches/network_cache';
+            }
+            break;
+          case PlatformType.android:
+            // Android: 使用临时目录作为fallback
+            final tempDir = Directory.systemTemp;
+            cachePath = '${tempDir.path}/cache/network_cache';
+            break;
+          case PlatformType.windows:
+            // Windows: %LOCALAPPDATA%\cache\ 或 %TEMP%\cache\
+            final localAppData = Platform.environment['LOCALAPPDATA'] ?? 
+                                Platform.environment['TEMP'];
+            if (localAppData != null) {
+              cachePath = '$localAppData\\cache\\network_cache';
+            }
+            break;
+          case PlatformType.linux:
+            // Linux: ~/.cache/
+            final homeDir = _getHomeDirectory();
+            if (homeDir != null) {
+              cachePath = '$homeDir/.cache/network_cache';
+            }
+            break;
+          case PlatformType.web:
+          case PlatformType.unknown:
+            return null;
+        }
+
+        if (cachePath != null) {
+          return Directory(normalizePath(cachePath));
+        }
+        
+        // Final fallback to system temp directory
+        final tempDir = Directory.systemTemp;
+        return Directory('${tempDir.path}/network_cache');
       }
-      
-      return null;
     } catch (e) {
       if (kDebugMode) {
         print('获取缓存目录失败: $e');
       }
-      return null;
+      // Final fallback to system temp directory
+      try {
+        final tempDir = Directory.systemTemp;
+        return Directory('${tempDir.path}/network_cache');
+      } catch (fallbackError) {
+        return null;
+      }
     }
   }
 
   /// 获取平台特定的文档目录
-  static Directory? getDocumentsDirectory()  {
+  static Future<Directory?> getDocumentsDirectory() async {
     try {
       if (kIsWeb) {
         return null;
       }
 
-      switch (currentPlatform) {
-        case PlatformType.ios:
-        case PlatformType.android:
-        case PlatformType.macos:
-        case PlatformType.windows:
-        case PlatformType.linux:
-          // 所有平台都使用系统临时目录下的documents子目录
-          final tempDir = Directory.systemTemp;
-          final documentsDir = Directory('${tempDir.path}/documents');
-          return documentsDir;
-        case PlatformType.web:
-        case PlatformType.unknown:
-          return null;
+      Directory? documentsDir;
+      
+      try {
+        // 使用 path_provider 获取平台特定的文档目录
+        documentsDir = await getApplicationDocumentsDirectory();
+        final networkDocumentsDir = Directory('${documentsDir.path}/network_documents');
+        return networkDocumentsDir;
+      } catch (e) {
+        if (kDebugMode) {
+          print('path_provider 获取文档目录失败，使用 fallback: $e');
+        }
+        
+        // Fallback to manual platform detection
+        String? documentsPath;
+
+        switch (currentPlatform) {
+          case PlatformType.ios:
+          case PlatformType.macos:
+          case PlatformType.linux:
+            // iOS/macOS/Linux: ~/Documents/
+            final homeDir = _getHomeDirectory();
+            if (homeDir != null) {
+              documentsPath = '$homeDir/Documents/network_documents';
+            }
+            break;
+          case PlatformType.android:
+            // Android: 使用临时目录作为fallback
+            final tempDir = Directory.systemTemp;
+            documentsPath = '${tempDir.path}/documents/network_documents';
+            break;
+          case PlatformType.windows:
+            // Windows: %USERPROFILE%\Documents\
+            final userProfile = _getHomeDirectory();
+            if (userProfile != null) {
+              documentsPath = '$userProfile\\Documents\\network_documents';
+            }
+            break;
+          case PlatformType.web:
+          case PlatformType.unknown:
+            return null;
+        }
+
+        if (documentsPath != null) {
+          return Directory(normalizePath(documentsPath));
+        }
+
+        // Final fallback to system temp directory
+        final tempDir = Directory.systemTemp;
+        return Directory('${tempDir.path}/documents/network_documents');
       }
     } catch (e) {
       if (kDebugMode) {
         print('获取文档目录失败: $e');
       }
-      return null;
+      // Final fallback to system temp directory
+      try {
+        final tempDir = Directory.systemTemp;
+        return Directory('${tempDir.path}/documents/network_documents');
+      } catch (fallbackError) {
+        return null;
+      }
     }
   }
 
@@ -223,6 +337,22 @@ class PlatformUtils {
       }
       return result;
     }
+  }
+
+  /// 获取带权限检查的缓存目录
+  static Future<Directory?> getCacheDirectoryWithPermissionCheck() async {
+    final cacheDir = await getCacheDirectory();
+    if (cacheDir == null) return null;
+    
+    return await _createDirectorySafely(cacheDir.path);
+  }
+
+  /// 获取带权限检查的文档目录
+  static Future<Directory?> getDocumentsDirectoryWithPermissionCheck() async {
+    final documentsDir = await getDocumentsDirectory();
+    if (documentsDir == null) return null;
+    
+    return await _createDirectorySafely(documentsDir.path);
   }
 
   /// 获取平台特定的路径分隔符
