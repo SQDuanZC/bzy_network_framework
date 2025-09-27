@@ -88,12 +88,37 @@ class CacheManager {
       
       if (!await _cacheDirectory!.exists()) {
         await _cacheDirectory!.create(recursive: true);
+        if (kDebugMode) {
+          debugPrint('缓存目录创建成功: ${_cacheDirectory!.path}');
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint('缓存目录已存在: ${_cacheDirectory!.path}');
+        }
       }
+      
+      // 验证目录是否可写
+      try {
+        final testFile = File('${_cacheDirectory!.path}/.test_write');
+        await testFile.writeAsString('test');
+        await testFile.delete();
+        if (kDebugMode) {
+          debugPrint('缓存目录写入权限验证成功');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('缓存目录写入权限验证失败: $e');
+        }
+        _cacheDirectory = null;
+        return;
+      }
+      
     } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('创建缓存目录失败: $e');
         debugPrint('堆栈跟踪: $stackTrace');
       }
+      _cacheDirectory = null;
       // 不重新抛出，允许框架在没有磁盘缓存的情况下继续运行
     }
   }
@@ -281,7 +306,24 @@ class CacheManager {
   /// 同步设置磁盘缓存
   Future<void> _setDiskCacheSync(String key, CacheEntry entry) async {
     try {
+      // 确保缓存目录存在
+      if (_cacheDirectory == null || !await _cacheDirectory!.exists()) {
+        await _initializeCacheDirectory();
+        if (_cacheDirectory == null) {
+          if (kDebugMode) {
+            debugPrint('缓存目录初始化失败，跳过磁盘缓存写入');
+          }
+          return;
+        }
+      }
+      
       final file = File('${_cacheDirectory!.path}/${_hashKey(key)}.cache');
+      
+      // 确保文件的父目录存在
+      final parentDir = file.parent;
+      if (!await parentDir.exists()) {
+        await parentDir.create(recursive: true);
+      }
       
       var dataToWrite = jsonEncode(entry.data);
       var isEncrypted = entry.isEncrypted;
@@ -999,6 +1041,14 @@ class CacheManager {
     
     return await _diskOperationLock.synchronized(() async {
       try {
+        // 确保缓存目录存在
+        if (!await _cacheDirectory!.exists()) {
+          await _initializeCacheDirectory();
+          if (_cacheDirectory == null) {
+            return null;
+          }
+        }
+        
         final file = File('${_cacheDirectory!.path}/${_hashKey(key)}.cache');
         
         if (!await file.exists()) {

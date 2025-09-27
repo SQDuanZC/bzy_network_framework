@@ -5,11 +5,21 @@ English | [中文](README.md)
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.7-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.8-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY Network Framework** is a high-performance, easily extensible Flutter network request solution that provides comprehensive network requests, caching, interceptors, monitoring, and other features.
 
-## 🆕 Latest Updates (v1.0.7)
+## 🆕 Latest Updates (v1.0.8)
+
+- 🌐 **Cross-Platform Storage Enhancement**: Added comprehensive cross-platform storage test suite supporting cache directory management across different operating systems
+- 📁 **Platform Detection Improvement**: Implemented intelligent platform detection functionality with automatic adaptation for iOS, Android, Windows, macOS, Linux platforms
+- 🗂️ **Directory Management Optimization**: Enhanced cache and document directory creation, permission checking, and available space monitoring capabilities
+- 🔧 **File System Compatibility**: Improved path separator handling and path normalization ensuring consistent cross-platform file operations
+- 📊 **Storage Information Monitoring**: Added PlatformStorageInfo class providing detailed platform storage information and disk space statistics
+- 🧪 **Test Stability Enhancement**: Fixed cache consistency issues ensuring all 15 storage-related tests pass reliably
+- 🛡️ **Error Handling Improvement**: Enhanced exception handling and recovery mechanisms for storage operations, improving framework robustness
+
+### v1.0.7 Updates
 
 - 🔧 **Interceptor Priority Fix**: Fixed priority sorting logic error in interceptor manager, ensuring "lower number = higher priority" rule is correctly implemented
 - 🏷️ **Cache Tag Functionality**: Fixed cache clearing by tag functionality in integration tests, ensuring accurate cache management

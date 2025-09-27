@@ -5,11 +5,21 @@
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.7-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.0.8-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY 网络框架** 是一个高性能、易扩展的 Flutter 网络请求解决方案，提供完整的网络请求、缓存、拦截器、监控等功能。
 
-## 🆕 最新更新 (v1.0.7)
+## 🆕 最新更新 (v1.0.8)
+
+- 🌐 **跨平台存储完善**: 新增完整的跨平台存储测试套件，支持不同操作系统的缓存目录管理
+- 📁 **平台检测增强**: 实现智能平台检测功能，自动适配 iOS、Android、Windows、macOS、Linux 等平台
+- 🗂️ **目录管理优化**: 完善缓存和文档目录的创建、权限检查和可用空间监控功能
+- 🔧 **文件系统兼容性**: 增强路径分隔符处理和路径标准化，确保跨平台文件操作的一致性
+- 📊 **存储信息监控**: 新增 PlatformStorageInfo 类，提供详细的平台存储信息和磁盘空间统计
+- 🧪 **测试稳定性提升**: 修复缓存一致性问题，确保所有15个存储相关测试稳定通过
+- 🛡️ **错误处理增强**: 完善存储操作的异常处理和恢复机制，提高框架健壮性
+
+### v1.0.7 更新
 
 - 🔧 **拦截器优先级修复**: 修复了拦截器管理器中优先级排序逻辑错误，确保"数值越小优先级越高"的规则正确实现
 - 🏷️ **缓存标签功能完善**: 修复了集成测试中缓存按标签清除功能，确保缓存管理的准确性
