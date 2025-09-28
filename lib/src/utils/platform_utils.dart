@@ -97,7 +97,7 @@ class PlatformUtils {
       
       try {
         // 使用 path_provider 获取平台特定的缓存目录
-        cacheDir = await getTemporaryDirectory();
+        cacheDir = await getApplicationCacheDirectory();
         final networkCacheDir = Directory('${cacheDir.path}/network_cache');
         return networkCacheDir;
       } catch (e) {
