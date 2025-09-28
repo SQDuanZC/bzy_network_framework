@@ -11,6 +11,11 @@
   - 保持向后兼容性，现有API无需修改
 
 ### 🔧 改进
+- **CacheManager 平台集成**: 重构 CacheManager 集成 PlatformUtils 实现跨平台缓存优化
+  - 重构 `CacheManager._initializeCacheDirectory()` 使用 `PlatformUtils.getCacheDirectoryWithPermissionCheck()`
+  - 移除重复的目录创建和权限检查逻辑，避免代码重复
+  - 实现平台特定的最佳缓存目录选择，提升跨平台兼容性
+  - 统一缓存目录管理策略，提高代码一致性和可维护性
 - **代码组织**: 优化拦截器代码结构，提高代码可读性和维护性
 - **测试覆盖**: 更新测试套件以适配新的拦截器架构
 - **依赖管理**: 简化拦截器间的依赖关系
