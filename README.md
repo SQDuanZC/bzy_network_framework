@@ -5,11 +5,20 @@
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.9-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.1.0-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY 网络框架** 是一个高性能、易扩展的 Flutter 网络请求解决方案，提供完整的网络请求、缓存、拦截器、监控等功能。
 
-## 🆕 最新更新 (v1.0.9)
+## 🆕 最新更新 (v1.1.0)
+
+- 🏗️ **拦截器架构重构**: 完成拦截器系统的模块化重构，将核心拦截器迁移到独立文件
+- 📦 **模块化设计**: 将 `LoggingInterceptor`、`RetryInterceptor`、`PerformanceInterceptor` 迁移到独立文件，提高可维护性
+- 🔧 **代码组织优化**: 优化拦截器代码结构，提高代码可读性和维护性
+- 🗑️ **精简框架**: 移除了使用较少的 `CacheInterceptor` 和 `AuthInterceptor`，简化框架结构
+- 🔄 **向后兼容**: 保持向后兼容性，现有API无需修改
+- 🧪 **测试更新**: 更新测试套件以适配新的拦截器架构，确保功能稳定性
+
+### v1.0.9 更新
 
 - 📁 **Path Provider 集成**: 集成 `path_provider` 插件，提供可靠的跨平台目录访问，改进平台特定目录处理
 - 🔧 **异步目录方法**: 增强 `getCacheDirectory` 和 `getDocumentsDirectory` 方法，完全异步化并具备适当的权限检查

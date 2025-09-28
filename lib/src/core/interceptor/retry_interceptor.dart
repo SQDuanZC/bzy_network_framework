@@ -3,10 +3,20 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../config/network_config.dart';
 import '../../utils/network_utils.dart';
+import 'interceptor_manager.dart';
 
 /// 重试拦截器
 /// 实现安全重试策略，仅在网络错误/服务器异常时重试，避免重复提交
-class RetryInterceptor extends Interceptor {
+class RetryInterceptor extends PluginInterceptor {
+  @override
+  String get name => 'retry';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => '重试拦截器';
+  
   final int maxRetryCount;
   final Duration retryDelay;
   final List<int> retryStatusCodes;

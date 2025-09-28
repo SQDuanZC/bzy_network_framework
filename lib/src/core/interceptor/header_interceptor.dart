@@ -1,9 +1,19 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'interceptor_manager.dart';
 
 /// 请求头拦截器
-/// 负责全局统一添加Token、版本号、设备信息等请求头
-class HeaderInterceptor extends Interceptor {
+/// 自动添加认证Token、设备信息、静态头部等
+class HeaderInterceptor extends PluginInterceptor {
+  @override
+  String get name => 'header';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => '请求头拦截器';
+  
   String? _token;
   String? _refreshToken;
   Map<String, String> _staticHeaders = {};

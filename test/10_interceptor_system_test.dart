@@ -6,6 +6,9 @@ import 'package:bzy_network_framework/src/core/interceptor/header_interceptor.da
 import 'package:bzy_network_framework/src/core/interceptor/network_status_interceptor.dart';
 import 'package:bzy_network_framework/src/core/interceptor/execution_timeout_interceptor.dart';
 import 'package:bzy_network_framework/src/core/interceptor/http_status_interceptor.dart';
+import 'package:bzy_network_framework/src/core/interceptor/logging_interceptor.dart';
+import 'package:bzy_network_framework/src/core/interceptor/retry_interceptor.dart';
+import 'package:bzy_network_framework/src/core/interceptor/performance_interceptor.dart';
 import 'package:bzy_network_framework/src/config/network_config.dart';
 import 'package:bzy_network_framework/src/utils/network_logger.dart';
 import 'package:logging/logging.dart';
@@ -241,18 +244,6 @@ void main() {
     });
 
     group('内置拦截器工厂', () {
-      test('创建缓存拦截器', () {
-        final cacheInterceptor = BuiltInInterceptors.createCacheInterceptor();
-        expect(cacheInterceptor, isA<CacheInterceptor>());
-        expect(cacheInterceptor.name, equals('cache'));
-      });
-
-      test('创建认证拦截器', () {
-        final authInterceptor = BuiltInInterceptors.createAuthInterceptor();
-        expect(authInterceptor, isA<AuthInterceptor>());
-        expect(authInterceptor.name, equals('auth'));
-      });
-
       test('创建日志拦截器', () {
         final loggingInterceptor = BuiltInInterceptors.createLoggingInterceptor();
         expect(loggingInterceptor, isA<LoggingInterceptor>());
@@ -266,36 +257,13 @@ void main() {
       });
 
       test('创建性能监控拦截器', () {
-        final performanceInterceptor = BuiltInInterceptors.createPerformanceInterceptor();
+        final performanceInterceptor = PerformanceInterceptor();
         expect(performanceInterceptor, isA<PerformanceInterceptor>());
         expect(performanceInterceptor.name, equals('performance'));
       });
     });
 
     group('内置拦截器功能测试', () {
-      test('缓存拦截器基础功能', () async {
-        final cacheInterceptor = CacheInterceptor();
-        
-        expect(cacheInterceptor.name, equals('cache'));
-        expect(cacheInterceptor.version, isNotEmpty);
-        expect(cacheInterceptor.description, isNotEmpty);
-        
-        // 测试初始化和销毁
-        await cacheInterceptor.initialize();
-        await cacheInterceptor.dispose();
-      });
-
-      test('认证拦截器基础功能', () async {
-        final authInterceptor = AuthInterceptor();
-        
-        expect(authInterceptor.name, equals('auth'));
-        expect(authInterceptor.version, isNotEmpty);
-        expect(authInterceptor.description, isNotEmpty);
-        
-        await authInterceptor.initialize();
-        await authInterceptor.dispose();
-      });
-
       test('日志拦截器基础功能', () async {
         final loggingInterceptor = LoggingInterceptor();
         
@@ -305,6 +273,28 @@ void main() {
         
         await loggingInterceptor.initialize();
         await loggingInterceptor.dispose();
+      });
+
+      test('性能监控拦截器基础功能', () async {
+        final performanceInterceptor = PerformanceInterceptor();
+        
+        expect(performanceInterceptor.name, equals('performance'));
+        expect(performanceInterceptor.version, isNotEmpty);
+        expect(performanceInterceptor.description, isNotEmpty);
+        
+        await performanceInterceptor.initialize();
+        await performanceInterceptor.dispose();
+      });
+
+      test('重试拦截器基础功能', () async {
+        final retryInterceptor = RetryInterceptor();
+        
+        expect(retryInterceptor.name, equals('retry'));
+        expect(retryInterceptor.version, isNotEmpty);
+        expect(retryInterceptor.description, isNotEmpty);
+        
+        await retryInterceptor.initialize();
+        await retryInterceptor.dispose();
       });
     });
 

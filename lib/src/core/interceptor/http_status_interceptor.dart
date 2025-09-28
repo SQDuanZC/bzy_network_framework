@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../bzy_network_framework.dart';
+import 'interceptor_manager.dart';
 
 /// HTTP状态码错误处理拦截器配置
 class HttpStatusConfig {
@@ -333,7 +334,16 @@ class EndpointValidator {
 }
 
 /// HTTP状态码错误处理拦截器
-class HttpStatusInterceptor extends Interceptor {
+class HttpStatusInterceptor extends PluginInterceptor {
+  @override
+  String get name => 'http_status';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => 'HTTP状态码错误处理拦截器';
+  
   final HttpStatusConfig _config;
   final HttpStatusStatistics _statistics = HttpStatusStatistics();
   final EndpointValidator _validator;

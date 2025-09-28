@@ -69,7 +69,7 @@ lib/bzy_network_framework.dart
 - `ErrorInterceptorHandler` - 错误拦截器处理器
 
 ### 4. 版本信息
-- `bzyNetworkFrameworkVersion` - 框架版本号（当前版本：'6'，对应pubspec版本：1.0.6）
+- `bzyNetworkFrameworkVersion` - 框架版本号（当前版本：'1.1.0'，对应pubspec版本：1.1.0）
 - `bzyNetworkFrameworkName` - 框架名称（'BZY Network Framework'）
 
 ## 使用方式

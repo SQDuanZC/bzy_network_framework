@@ -2,11 +2,21 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'dart:async';
 import 'package:synchronized/synchronized.dart';
+import 'interceptor_manager.dart';
 
 /// Token自动刷新拦截器
 /// 处理Token过期自动刷新、并发请求等待、刷新失败处理
-class TokenRefreshInterceptor extends Interceptor {
+class TokenRefreshInterceptor extends PluginInterceptor {
   final Dio _dio;
+  
+  @override
+  String get name => 'token_refresh';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => 'Token自动刷新拦截器';
   
   // Token刷新配置
   late TokenRefreshConfig _config;

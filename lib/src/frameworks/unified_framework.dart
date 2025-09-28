@@ -7,6 +7,7 @@ import '../config/network_config.dart';
 import '../utils/network_logger.dart';
 import '../core/exception/unified_exception_handler.dart';
 import '../core/interceptor/interceptor_manager.dart';
+import '../core/interceptor/retry_interceptor.dart';
 
 /// Unified network framework - core entry point for plugin architecture
 class UnifiedNetworkFramework {
@@ -40,7 +41,7 @@ class UnifiedNetworkFramework {
   }
   
   /// Initialize framework
-  Future<void> initialize({
+  void initialize({
     List<NetworkPlugin>? plugins,
     List<GlobalInterceptor>? interceptors,
   }) async {  

@@ -6,7 +6,7 @@ BZY Network Framework 是一个功能完整、高性能的 Flutter 网络请求�
 
 ### 版本信息
 - **框架名称**: BZY Network Framework
-- **当前版本**: 1.0.6
+- **当前版本**: 1.1.0
 - **基础依赖**: Dio, Logging, Connectivity Plus, Synchronized
 
 ## 核心设计理念

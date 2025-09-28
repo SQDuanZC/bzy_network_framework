@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../utils/network_logger.dart';
+import 'logging_interceptor.dart';
+import 'retry_interceptor.dart';
+import 'performance_interceptor.dart';
 
 /// 插件化拦截器管理器
 /// 支持拦截器的动态注册、管理、执行顺序控制
@@ -473,6 +476,15 @@ abstract class PluginInterceptor extends Interceptor {
   /// 拦截器描述
   String get description;
   
+  /// 是否支持请求拦截
+  bool get supportsRequestInterception => false;
+  
+  /// 是否支持响应拦截
+  bool get supportsResponseInterception => false;
+  
+  /// 是否支持错误拦截
+  bool get supportsErrorInterception => false;
+  
   /// 初始化拦截器
   Future<void> initialize() async {
     // 默认不需要初始化
@@ -618,15 +630,9 @@ class InterceptorMetrics {
 
 /// 内置拦截器工厂
 class BuiltInInterceptors {
-  /// 创建缓存拦截器
-  static CacheInterceptor createCacheInterceptor() {
-    return CacheInterceptor();
-  }
+
   
-  /// 创建认证拦截器
-  static AuthInterceptor createAuthInterceptor() {
-    return AuthInterceptor();
-  }
+
   
   /// 创建日志拦截器
   static LoggingInterceptor createLoggingInterceptor() {
@@ -638,10 +644,7 @@ class BuiltInInterceptors {
     return RetryInterceptor();
   }
   
-  /// 创建性能监控拦截器
-  static PerformanceInterceptor createPerformanceInterceptor() {
-    return PerformanceInterceptor();
-  }
+
 }
 
 class CustomRequestInterceptorHandler extends RequestInterceptorHandler {
@@ -701,208 +704,5 @@ class CustomErrorInterceptorHandler extends ErrorInterceptorHandler {
   @override
   void reject(DioException error) {
     _onError(error);
-  }
-}
-
-/// 缓存拦截器
-class CacheInterceptor extends PluginInterceptor {
-  @override
-  String get name => 'cache';
-  
-  @override
-  String get version => '1.0.0';
-  
-  @override
-  String get description => '缓存拦截器';
-  
-  @override
-  bool get supportsRequestInterception => true;
-  
-  @override
-  bool get supportsResponseInterception => true;
-  
-  @override
-  Future<RequestOptions> onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
-    // 检查缓存逻辑
-    NetworkLogger.interceptor.fine('缓存拦截器: 检查请求缓存');
-    return options;
-  }
-  
-  @override
-  Future<Response> onResponse(
-    Response response,
-    ResponseInterceptorHandler handler,
-  ) async {
-    // 保存缓存逻辑
-    NetworkLogger.interceptor.fine('缓存拦截器: 保存响应缓存');
-    return response;
-  }
-}
-
-/// 认证拦截器
-class AuthInterceptor extends PluginInterceptor {
-  @override
-  String get name => 'auth';
-  
-  @override
-  String get version => '1.0.0';
-  
-  @override
-  String get description => '认证拦截器';
-  
-  @override
-  bool get supportsRequestInterception => true;
-  
-  @override
-  bool get supportsErrorInterception => true;
-  
-  @override
-  Future<RequestOptions> onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
-    // 添加认证头
-    NetworkLogger.interceptor.fine('认证拦截器: 添加认证信息');
-    return options;
-  }
-  
-  @override
-  Future<void> onError(
-    DioException err,
-    ErrorInterceptorHandler handler,
-  ) async {
-    // 处理认证错误
-    NetworkLogger.interceptor.fine('认证拦截器: 处理认证错误');
-  }
-}
-
-/// 日志拦截器
-class LoggingInterceptor extends PluginInterceptor {
-  @override
-  String get name => 'logging';
-  
-  @override
-  String get version => '1.0.0';
-  
-  @override
-  String get description => '日志拦截器';
-  
-  @override
-  bool get supportsRequestInterception => true;
-  
-  @override
-  bool get supportsResponseInterception => true;
-  
-  @override
-  bool get supportsErrorInterception => true;
-  
-  @override
-  Future<RequestOptions> onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
-    NetworkLogger.interceptor.info('日志拦截器: 记录请求 ${options.method} ${options.uri}');
-    return options;
-  }
-  
-  @override
-  Future<Response> onResponse(
-    Response response,
-    ResponseInterceptorHandler handler,
-  ) async {
-    NetworkLogger.interceptor.info('日志拦截器: 记录响应 ${response.statusCode}');
-    return response;
-  }
-  
-  @override
-  Future<void> onError(
-    DioException err,
-    ErrorInterceptorHandler handler,
-  ) async {
-    NetworkLogger.interceptor.warning('日志拦截器: 记录错误 ${err.message}');
-  }
-}
-
-/// 重试拦截器
-class RetryInterceptor extends PluginInterceptor {
-  @override
-  String get name => 'retry';
-  
-  @override
-  String get version => '1.0.0';
-  
-  @override
-  String get description => '重试拦截器';
-  
-  @override
-  bool get supportsRequestInterception => true;
-  
-  @override
-  bool get supportsErrorInterception => true;
-  
-  @override
-  Future<RequestOptions> onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
-    // 直接返回请求选项，不做任何处理
-    return options;
-  }
-  
-  @override
-  Future<void> onError(
-    DioException err,
-    ErrorInterceptorHandler handler,
-  ) async {
-    // 重试逻辑
-    NetworkLogger.interceptor.fine('重试拦截器: 处理重试');
-  }
-}
-
-/// 性能监控拦截器
-class PerformanceInterceptor extends PluginInterceptor {
-  @override
-  String get name => 'performance';
-  
-  @override
-  String get version => '1.0.0';
-  
-  @override
-  String get description => '性能监控拦截器';
-  
-  @override
-  bool get supportsRequestInterception => true;
-  
-  @override
-  bool get supportsResponseInterception => true;
-  
-  @override
-  Future<RequestOptions> onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
-    // 记录请求开始时间
-    options.extra['startTime'] = DateTime.now();
-    return options;
-  }
-  
-  @override
-  Future<Response> onResponse(
-    Response response,
-    ResponseInterceptorHandler handler,
-  ) async {
-    // 计算请求耗时
-    final startTime = response.requestOptions.extra['startTime'] as DateTime?;
-    if (startTime != null) {
-      final duration = DateTime.now().difference(startTime);
-      // 可以在这里记录性能数据或发送到监控系统
-      // 性能监控: 请求耗时 ${duration.inMilliseconds}ms
-      // 使用duration变量避免警告
-      response.extra['duration'] = duration.inMilliseconds;
-    }
-    return response;
   }
 }

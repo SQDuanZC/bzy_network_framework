@@ -5,11 +5,20 @@ English | [中文](README.md)
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.0.9-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.1.0-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY Network Framework** is a high-performance, easily extensible Flutter network request solution that provides comprehensive network requests, caching, interceptors, monitoring, and other features.
 
-## 🆕 Latest Updates (v1.0.9)
+## 🆕 Latest Updates (v1.1.0)
+
+- 🏗️ **Interceptor Architecture Refactoring**: Completed modular refactoring of the interceptor system, migrating core interceptors to independent files
+- 📦 **Modular Design**: Migrated `LoggingInterceptor`, `RetryInterceptor`, `PerformanceInterceptor` to independent files for improved maintainability
+- 🔧 **Code Organization Optimization**: Optimized interceptor code structure for better readability and maintainability
+- 🗑️ **Framework Simplification**: Removed less-used `CacheInterceptor` and `AuthInterceptor` to simplify framework structure
+- 🔄 **Backward Compatibility**: Maintained backward compatibility with no changes required to existing APIs
+- 🧪 **Test Updates**: Updated test suite to adapt to new interceptor architecture, ensuring functional stability
+
+### v1.0.9 Updates
 
 - 📁 **Path Provider Integration**: Integrated `path_provider` plugin for reliable cross-platform directory access, improving platform-specific directory handling
 - 🔧 **Async Directory Methods**: Enhanced `getCacheDirectory` and `getDocumentsDirectory` methods to be fully async with proper permission checking

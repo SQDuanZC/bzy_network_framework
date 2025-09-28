@@ -3,10 +3,20 @@ import 'package:dio/dio.dart';
 import '../../config/network_config.dart';
 import '../../utils/network_utils.dart';
 import '../../utils/network_logger.dart';
+import 'interceptor_manager.dart';
 
 /// 日志拦截器
 /// 负责输出完整的请求和响应日志，支持敏感数据脱敏
-class LoggingInterceptor extends Interceptor {
+class LoggingInterceptor extends PluginInterceptor {
+  @override
+  String get name => 'logging';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => '日志拦截器';
+  
   final bool enableRequest;
   final bool enableResponse;
   final bool enableError;
