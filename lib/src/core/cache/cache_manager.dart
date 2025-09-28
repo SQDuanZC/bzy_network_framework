@@ -7,6 +7,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 import '../../model/response_wrapper.dart';
+import '../../utils/platform_utils.dart';
 
 /// 缓存管理器
 /// 支持内存缓存、磁盘缓存、缓存策略、过期管理
@@ -82,41 +83,27 @@ class CacheManager {
   /// 初始化缓存目录
   Future<void> _initializeCacheDirectory() async {
     try {
-      // 使用系统临时目录作为缓存目录
-      final tempDir = Directory.systemTemp;
-      _cacheDirectory = Directory('${tempDir.path}/network_cache');
+      // 使用 PlatformUtils 获取平台特定的缓存目录，包含权限检查
+      _cacheDirectory = await PlatformUtils.getCacheDirectoryWithPermissionCheck();
       
-      if (!await _cacheDirectory!.exists()) {
-        await _cacheDirectory!.create(recursive: true);
+      if (_cacheDirectory != null) {
         if (kDebugMode) {
-          debugPrint('缓存目录创建成功: ${_cacheDirectory!.path}');
+          debugPrint('缓存目录初始化成功: ${_cacheDirectory!.path}');
+          debugPrint('平台: ${PlatformUtils.platformName}');
         }
       } else {
         if (kDebugMode) {
-          debugPrint('缓存目录已存在: ${_cacheDirectory!.path}');
+          debugPrint('无法获取缓存目录，将使用仅内存缓存模式');
+          debugPrint('平台: ${PlatformUtils.platformName}');
         }
-      }
-      
-      // 验证目录是否可写
-      try {
-        final testFile = File('${_cacheDirectory!.path}/.test_write');
-        await testFile.writeAsString('test');
-        await testFile.delete();
-        if (kDebugMode) {
-          debugPrint('缓存目录写入权限验证成功');
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('缓存目录写入权限验证失败: $e');
-        }
-        _cacheDirectory = null;
-        return;
+        // 在没有磁盘缓存的情况下继续运行（如 Web 平台）
       }
       
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        debugPrint('创建缓存目录失败: $e');
+        debugPrint('初始化缓存目录失败: $e');
         debugPrint('堆栈跟踪: $stackTrace');
+        debugPrint('平台: ${PlatformUtils.platformName}');
       }
       _cacheDirectory = null;
       // 不重新抛出，允许框架在没有磁盘缓存的情况下继续运行
