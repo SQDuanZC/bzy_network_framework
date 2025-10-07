@@ -2,7 +2,39 @@
 
 本文档记录了 BZY 网络框架的所有重要变更。
 
+## [1.1.2] - 2025-1-28
+
+### 🔧 拦截器系统优化
+- **移除冗余拦截器**: 删除了功能重复的 `ExecutionTimeoutInterceptor`
+  - 该拦截器的功能与 `RetryInterceptor` 重复，移除以避免功能冲突
+  - 清理了相关的测试文件引用和覆盖率记录
+  
+- **TimeoutInterceptor 重构**: 优化 `TimeoutInterceptor` 功能职责
+  - 移除重试相关配置参数：`timeoutRetryCount`、`timeoutRetryDelay`、`enableExponentialBackoff`、`errorStrategy`
+  - 删除 `TimeoutErrorStrategy` 枚举，简化配置复杂度
+  - 移除重试逻辑相关方法：`_handleTimeoutError`、`_calculateBackoffDelay`、`_calculateAdjustedTimeout`
+  - 专注于动态超时调整和网络质量检测功能
+  
+- **导出优化**: 在拦截器管理器中正确导出 `TimeoutInterceptor`
+  - 添加了 `timeout_interceptor.dart` 的导入和导出
+  - 确保外部可以正确访问优化后的 `TimeoutInterceptor`
+
+### 📋 拦截器分类建议
+- **核心必须（3个）**: `HeaderInterceptor`、`LoggingInterceptor`、`RetryInterceptor`
+- **推荐使用（2个）**: `PerformanceInterceptor`、`HttpStatusInterceptor`
+- **按需选择（3个）**: `TimeoutInterceptor`（已优化）、`TokenRefreshInterceptor`、`NetworkStatusInterceptor`
+
+### ✅ 测试验证
+- 拦截器系统测试全部通过，确保优化不影响现有功能
+- 代码分析通过，无新增错误或警告
+
 ## [1.1.1] - 2025-1-28
+
+### ✨ 新增功能
+- **versionBased 策略文档**: 完善 versionBased 策略相关文档和示例
+  - 在中英文 README 中添加智能版本控制、动态热更新、版本安全控制和版本追踪监控功能介绍
+  - 新增完整的 versionBased 策略使用示例，包括基础版本控制、动态热更新场景和多模块版本协作
+  - 更新特性列表，添加智能版本控制、动态热更新、多策略注册和版本追踪等新特性
 
 ### 🔧 改进
 - **CacheManager 平台集成**: 重构 CacheManager 集成 PlatformUtils 实现跨平台缓存优化
@@ -10,6 +42,10 @@
   - 移除重复的目录创建和权限检查逻辑，避免代码重复
   - 实现平台特定的最佳缓存目录选择，提升跨平台兼容性
   - 统一缓存目录管理策略，提高代码一致性和可维护性
+
+### 📚 文档更新
+- **README 增强**: 完善中英文 README 文档，详细介绍 versionBased 策略的核心功能和应用场景
+- **示例代码**: 添加丰富的 versionBased 策略使用示例，涵盖从基础到高级的各种使用场景
 
 ## [1.1.0] - 2025-1-28
 

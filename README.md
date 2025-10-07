@@ -5,11 +5,11 @@
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.1.0-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.1.1-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY 网络框架** 是一个高性能、易扩展的 Flutter 网络请求解决方案，提供完整的网络请求、缓存、拦截器、监控等功能。
 
-## 🆕 最新更新 (v1.1.0)
+## 最新更新 (v1.1.1)
 
 - 🏗️ **拦截器架构重构**: 完成拦截器系统的模块化重构，将核心拦截器迁移到独立文件
 - 📦 **模块化设计**: 将 `LoggingInterceptor`、`RetryInterceptor`、`PerformanceInterceptor` 迁移到独立文件，提高可维护性
@@ -17,6 +17,10 @@
 - 🗑️ **精简框架**: 移除了使用较少的 `CacheInterceptor` 和 `AuthInterceptor`，简化框架结构
 - 🔄 **向后兼容**: 保持向后兼容性，现有API无需修改
 - 🧪 **测试更新**: 更新测试套件以适配新的拦截器架构，确保功能稳定性
+- 🎯 **versionBased 策略**: 新增智能版本控制的拦截器注册策略，支持自动升级和防止降级
+- 🔄 **动态热更新**: 支持运行时动态下发和热更新拦截器，无需重启应用
+- 🛡️ **版本安全控制**: 防止意外降级，确保拦截器版本的向前兼容性
+- 📊 **版本追踪监控**: 提供详细的版本升级日志和监控功能
 
 ### v1.0.9 更新
 
@@ -98,6 +102,10 @@
 - 🔐 **安全可靠**: 支持证书锁定和请求签名
 - 🔍 **全面错误处理**: 统一错误处理机制，支持针对不同HTTP状态码的自定义错误处理
 - 📝 **详细日志**: 增强的日志系统，记录请求/响应详情和性能指标
+- 🎯 **智能版本控制**: 支持 versionBased 策略的拦截器版本管理，防止意外降级
+- 🔄 **动态热更新**: 运行时动态下发和更新拦截器，支持零停机升级
+- 🛡️ **多策略注册**: 支持 replace、skip、versionBased 等多种拦截器注册策略
+- 📊 **版本追踪**: 完整的版本升级日志和监控，支持回滚和故障排查
 
 ## 🚀 快速开始
 
@@ -434,6 +442,135 @@ final responses = await UnifiedNetworkFramework.instance.executeBatch(
 // 处理结果
 final successCount = responses.where((r) => r.isSuccess).length;
 print('成功请求数: $successCount/${responses.length}');
+```
+
+### versionBased 策略 - 智能版本控制
+
+```dart
+// 1. 创建带版本的拦截器
+class TokenInterceptorV1 extends PluginInterceptor {
+  @override
+  String get name => 'token_interceptor';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => 'Token 拦截器 v1.0.0';
+  
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    // 基础 Token 处理
+    final token = getStoredToken();
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+}
+
+// 2. 注册初始版本
+final manager = InterceptorManager.instance;
+bool success = manager.registerInterceptorSmart(
+  'token_interceptor',
+  TokenInterceptorV1(),
+  strategy: InterceptorRegistrationStrategy.versionBased,
+);
+
+// 3. 升级到新版本（支持 Token 刷新）
+class TokenInterceptorV2 extends PluginInterceptor {
+  @override
+  String get name => 'token_interceptor';
+  
+  @override
+  String get version => '2.0.0';  // 更高版本
+  
+  @override
+  String get description => 'Token 拦截器 v2.0.0 - 支持自动刷新';
+  
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final token = getStoredToken();
+    if (token != null) {
+      if (isTokenExpired(token)) {
+        // 新功能：自动刷新 Token
+        refreshToken().then((newToken) => {
+          options.headers['Authorization'] = 'Bearer $newToken'
+        });
+      } else {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
+    }
+    handler.next(options);
+  }
+}
+
+// 4. 自动升级（系统会自动替换为 v2.0.0）
+bool upgraded = manager.registerInterceptorSmart(
+  'token_interceptor',
+  TokenInterceptorV2(),
+  strategy: InterceptorRegistrationStrategy.versionBased,
+);
+
+// 5. 尝试降级会被拒绝
+class TokenInterceptorV1_5 extends PluginInterceptor {
+  @override
+  String get version => '1.5.0';  // 低于当前版本 2.0.0
+  // ...
+}
+
+// 这个注册会失败，因为版本号较低
+bool downgrade = manager.registerInterceptorSmart(
+  'token_interceptor',
+  TokenInterceptorV1_5(),
+  strategy: InterceptorRegistrationStrategy.versionBased,
+);
+print('降级结果: ${downgrade ? "成功" : "被拒绝"}'); // 输出: 被拒绝
+```
+
+### 动态热更新场景
+
+```dart
+// 场景：紧急修复支付安全漏洞
+class PaymentSecurityInterceptor extends PluginInterceptor {
+  @override
+  String get name => 'payment_security';
+  
+  @override
+  String get version => '1.0.1';  // 紧急修复版本
+  
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (options.path.contains('/payment')) {
+      // 紧急安全修复：添加额外验证
+      options.headers['X-Security-Check'] = generateSecurityHash();
+      options.headers['X-Timestamp'] = DateTime.now().millisecondsSinceEpoch.toString();
+    }
+    handler.next(options);
+  }
+}
+
+// 运行时动态下发，立即生效
+manager.registerInterceptorSmart(
+  'payment_security',
+  PaymentSecurityInterceptor(),
+  strategy: InterceptorRegistrationStrategy.versionBased,
+);
+```
+
+### 多模块版本协作
+
+```dart
+// 模块A注册基础功能 v1.0.0
+moduleA.registerInterceptor('logging', LoggingInterceptorV1());
+
+// 模块B尝试注册增强功能 v1.2.0（成功，版本更高）
+moduleB.registerInterceptor('logging', LoggingInterceptorV1_2());
+
+// 模块C尝试注册旧版本 v1.1.0（失败，版本较低）
+moduleC.registerInterceptor('logging', LoggingInterceptorV1_1());
+
+// 最终使用模块B的 v1.2.0 版本
 ```
 
 ### 自定义拦截器

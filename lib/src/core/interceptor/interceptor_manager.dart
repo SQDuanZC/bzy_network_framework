@@ -5,6 +5,26 @@ import '../../utils/network_logger.dart';
 import 'logging_interceptor.dart';
 import 'retry_interceptor.dart';
 import 'performance_interceptor.dart';
+import 'header_interceptor.dart';
+import 'timeout_interceptor.dart';
+
+// 导出拦截器类，供外部使用
+export 'timeout_interceptor.dart';
+
+/// 拦截器注册策略
+enum InterceptorRegistrationStrategy {
+  /// 严格模式：重复注册时抛出异常（默认）
+  strict,
+  
+  /// 替换模式：自动替换已存在的拦截器
+  replace,
+  
+  /// 跳过模式：如果已存在则跳过注册
+  skip,
+  
+  /// 版本控制模式：基于版本号决定是否替换
+  versionBased,
+}
 
 /// 插件化拦截器管理器
 /// 支持拦截器的动态注册、管理、执行顺序控制
@@ -57,6 +77,136 @@ class InterceptorManager {
     }
     
     NetworkLogger.interceptor.info('拦截器已注册: $name');
+  }
+  
+  /// 注册或覆盖拦截器
+  void registerOrReplaceInterceptor(
+    String name,
+    PluginInterceptor interceptor, {
+    InterceptorConfig? config,
+    int? priority,
+  }) {
+    // 如果已存在，先注销
+    if (_interceptors.containsKey(name)) {
+      unregisterInterceptor(name);
+      NetworkLogger.interceptor.info('拦截器已覆盖: $name');
+    }
+    
+    // 重新注册
+    _interceptors[name] = interceptor;
+    _configs[name] = config ?? InterceptorConfig();
+    
+    // 根据优先级插入执行顺序
+    if (priority != null) {
+      _insertByPriority(name, priority);
+    } else {
+      _executionOrder.add(name);
+    }
+    
+    NetworkLogger.interceptor.info('拦截器已注册: $name');
+  }
+  
+  /// 智能注册拦截器
+  /// 支持多种注册策略处理重复注册情况
+  bool registerInterceptorSmart(
+    String name,
+    PluginInterceptor interceptor, {
+    InterceptorConfig? config,
+    int? priority,
+    InterceptorRegistrationStrategy strategy = InterceptorRegistrationStrategy.strict,
+  }) {
+    final exists = _interceptors.containsKey(name);
+    
+    if (!exists) {
+      // 不存在，直接注册
+      _doRegisterInterceptor(name, interceptor, config, priority);
+      return true;
+    }
+    
+    // 已存在，根据策略处理
+    switch (strategy) {
+      case InterceptorRegistrationStrategy.strict:
+        throw ArgumentError('拦截器 "$name" 已存在');
+        
+      case InterceptorRegistrationStrategy.replace:
+        unregisterInterceptor(name);
+        _doRegisterInterceptor(name, interceptor, config, priority);
+        NetworkLogger.interceptor.info('拦截器已替换: $name');
+        return true;
+        
+      case InterceptorRegistrationStrategy.skip:
+        NetworkLogger.interceptor.info('拦截器已存在，跳过注册: $name');
+        return false;
+        
+      case InterceptorRegistrationStrategy.versionBased:
+        return _handleVersionBasedRegistration(name, interceptor, config, priority);
+    }
+  }
+  
+  /// 执行实际的注册操作
+  void _doRegisterInterceptor(
+    String name,
+    PluginInterceptor interceptor,
+    InterceptorConfig? config,
+    int? priority,
+  ) {
+    _interceptors[name] = interceptor;
+    _configs[name] = config ?? InterceptorConfig();
+    
+    // 根据优先级插入执行顺序
+    if (priority != null) {
+      _insertByPriority(name, priority);
+    } else {
+      _executionOrder.add(name);
+    }
+    
+    NetworkLogger.interceptor.info('拦截器已注册: $name');
+  }
+  
+  /// 处理基于版本的注册
+  bool _handleVersionBasedRegistration(
+    String name,
+    PluginInterceptor interceptor,
+    InterceptorConfig? config,
+    int? priority,
+  ) {
+    final existing = _interceptors[name];
+    if (existing == null) return false;
+    
+    // 比较版本号
+    final existingVersion = _parseVersion(existing.version);
+    final newVersion = _parseVersion(interceptor.version);
+    
+    if (newVersion > existingVersion) {
+      unregisterInterceptor(name);
+      _doRegisterInterceptor(name, interceptor, config, priority);
+      NetworkLogger.interceptor.info('拦截器已升级: $name (${existing.version} -> ${interceptor.version})');
+      return true;
+    } else {
+      NetworkLogger.interceptor.info('拦截器版本不够新，跳过注册: $name (当前: ${existing.version}, 新: ${interceptor.version})');
+      return false;
+    }
+  }
+  
+  
+  /// 解析版本号
+  int _parseVersion(String version) {
+    try {
+      // 简单的版本号解析，支持 "1.0.0" 格式
+      final parts = version.split('.');
+      if (parts.length >= 3) {
+        return int.parse(parts[0]) * 10000 + 
+               int.parse(parts[1]) * 100 + 
+               int.parse(parts[2]);
+      } else if (parts.length == 2) {
+        return int.parse(parts[0]) * 10000 + int.parse(parts[1]) * 100;
+      } else {
+        return int.parse(parts[0]) * 10000;
+      }
+    } catch (e) {
+      NetworkLogger.interceptor.warning('无法解析版本号: $version');
+      return 0;
+    }
   }
   
   /// 注销拦截器
@@ -120,6 +270,120 @@ class InterceptorManager {
   /// 获取拦截器列表
   List<String> getInterceptorNames() {
     return List.from(_executionOrder);
+  }
+  
+  /// 检查拦截器是否已注册
+  bool hasInterceptor(String name) {
+    return _interceptors.containsKey(name);
+  }
+  
+  /// 批量注册拦截器
+  /// 返回成功注册的拦截器名称列表
+  List<String> registerInterceptorsBatch(
+    Map<String, PluginInterceptor> interceptors, {
+    Map<String, InterceptorConfig>? configs,
+    Map<String, int>? priorities,
+    InterceptorRegistrationStrategy strategy = InterceptorRegistrationStrategy.strict,
+    bool continueOnError = false,
+  }) {
+    final successfulRegistrations = <String>[];
+    final errors = <String, Exception>{};
+    
+    for (final entry in interceptors.entries) {
+      final name = entry.key;
+      final interceptor = entry.value;
+      final config = configs?[name];
+      final priority = priorities?[name];
+      
+      try {
+        final success = registerInterceptorSmart(
+          name,
+          interceptor,
+          config: config,
+          priority: priority,
+          strategy: strategy,
+        );
+        
+        if (success) {
+          successfulRegistrations.add(name);
+        }
+      } catch (e) {
+        errors[name] = e as Exception;
+        
+        if (!continueOnError) {
+          // 回滚已注册的拦截器
+          for (final registeredName in successfulRegistrations) {
+            unregisterInterceptor(registeredName);
+          }
+          rethrow;
+        }
+      }
+    }
+    
+    if (errors.isNotEmpty && !continueOnError) {
+      NetworkLogger.interceptor.warning('批量注册时发生错误: $errors');
+    }
+    
+    NetworkLogger.interceptor.info('批量注册完成，成功: ${successfulRegistrations.length}, 失败: ${errors.length}');
+    return successfulRegistrations;
+  }
+  
+  /// 安全重置拦截器管理器
+  /// 清理所有拦截器并重新初始化
+  void safeReset() {
+    NetworkLogger.interceptor.info('开始安全重置拦截器管理器');
+    
+    // 记录当前状态
+    final currentInterceptors = Map<String, PluginInterceptor>.from(_interceptors);
+    final currentConfigs = Map<String, InterceptorConfig>.from(_configs);
+    
+    try {
+      // 清理所有拦截器
+      clear();
+      
+      // 重新初始化统计
+      _statistics.reset();
+      
+      NetworkLogger.interceptor.info('拦截器管理器已安全重置');
+    } catch (e) {
+      NetworkLogger.interceptor.severe('重置失败，尝试恢复: $e');
+       
+       // 尝试恢复之前的状态
+       try {
+         _interceptors.addAll(currentInterceptors);
+         _configs.addAll(currentConfigs);
+         _executionOrder.addAll(currentInterceptors.keys);
+       } catch (restoreError) {
+         NetworkLogger.interceptor.severe('状态恢复失败: $restoreError');
+       }
+      
+      rethrow;
+    }
+  }
+  
+  /// 获取拦截器详细信息
+  Map<String, Map<String, dynamic>> getInterceptorDetails() {
+    final details = <String, Map<String, dynamic>>{};
+    
+    for (final name in _executionOrder) {
+      final interceptor = _interceptors[name];
+      final config = _configs[name];
+      
+      if (interceptor != null && config != null) {
+        details[name] = {
+          'name': interceptor.name,
+          'version': interceptor.version,
+          'description': interceptor.description,
+          'enabled': config.enabled,
+          'priority': config.priority,
+          'supportsRequest': interceptor.supportsRequestInterception,
+          'supportsResponse': interceptor.supportsResponseInterception,
+          'supportsError': interceptor.supportsErrorInterception,
+        };
+      }
+    }
+    
+    return details;
   }
   
   /// 获取已启用的拦截器列表
@@ -630,10 +894,6 @@ class InterceptorMetrics {
 
 /// 内置拦截器工厂
 class BuiltInInterceptors {
-
-  
-
-  
   /// 创建日志拦截器
   static LoggingInterceptor createLoggingInterceptor() {
     return LoggingInterceptor();
@@ -643,8 +903,115 @@ class BuiltInInterceptors {
   static RetryInterceptor createRetryInterceptor() {
     return RetryInterceptor();
   }
-  
+}
 
+/// 拦截器管理器扩展 - 便捷方法
+extension InterceptorManagerConvenience on InterceptorManager {
+  /// 快速注册常用拦截器组合
+  void registerCommonInterceptors({
+    InterceptorRegistrationStrategy strategy = InterceptorRegistrationStrategy.replace,
+  }) {
+    final interceptors = {
+      'header': HeaderInterceptor(),
+      'logging': LoggingInterceptor(),
+      'retry': RetryInterceptor(),
+    };
+    
+    registerInterceptorsBatch(
+      interceptors,
+      strategy: strategy,
+      continueOnError: true,
+    );
+  }
+  
+  /// 安全注册拦截器（自动处理重复）
+  bool safeRegister(
+    String name,
+    PluginInterceptor interceptor, {
+    InterceptorConfig? config,
+    int? priority,
+  }) {
+    return registerInterceptorSmart(
+      name,
+      interceptor,
+      config: config,
+      priority: priority,
+      strategy: InterceptorRegistrationStrategy.replace,
+    );
+  }
+  
+  /// 条件注册拦截器
+  bool registerIf(
+    String name,
+    PluginInterceptor interceptor,
+    bool condition, {
+    InterceptorConfig? config,
+    int? priority,
+    InterceptorRegistrationStrategy strategy = InterceptorRegistrationStrategy.skip,
+  }) {
+    if (!condition) {
+      NetworkLogger.interceptor.info('条件不满足，跳过注册: $name');
+      return false;
+    }
+    
+    return registerInterceptorSmart(
+      name,
+      interceptor,
+      config: config,
+      priority: priority,
+      strategy: strategy,
+    );
+  }
+  
+  /// 临时注册拦截器（自动清理）
+  Future<T> withTemporaryInterceptor<T>(
+    String name,
+    PluginInterceptor interceptor,
+    Future<T> Function() operation, {
+    InterceptorConfig? config,
+    int? priority,
+  }) async {
+    final wasRegistered = hasInterceptor(name);
+    PluginInterceptor? originalInterceptor;
+    InterceptorConfig? originalConfig;
+    
+    if (wasRegistered) {
+      originalInterceptor = _interceptors[name];
+      originalConfig = _configs[name];
+    }
+    
+    try {
+      // 注册临时拦截器
+      safeRegister(name, interceptor, config: config, priority: priority);
+      
+      // 执行操作
+      return await operation();
+    } finally {
+      // 恢复原状态
+      if (wasRegistered && originalInterceptor != null) {
+        safeRegister(name, originalInterceptor, config: originalConfig);
+      } else {
+        unregisterInterceptor(name);
+      }
+    }
+  }
+  
+  /// 获取拦截器健康状态
+  Map<String, bool> getInterceptorHealth() {
+    final health = <String, bool>{};
+    
+    for (final name in _executionOrder) {
+      final interceptor = _interceptors[name];
+      final config = _configs[name];
+      
+      // 简单的健康检查
+      health[name] = interceptor != null && 
+                   config != null && 
+                   config.enabled;
+    }
+    
+    return health;
+  }
 }
 
 class CustomRequestInterceptorHandler extends RequestInterceptorHandler {

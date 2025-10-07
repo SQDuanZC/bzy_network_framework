@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:bzy_network_framework/src/core/interceptor/interceptor_manager.dart';
 import 'package:bzy_network_framework/src/core/interceptor/header_interceptor.dart';
 import 'package:bzy_network_framework/src/core/interceptor/network_status_interceptor.dart';
-import 'package:bzy_network_framework/src/core/interceptor/execution_timeout_interceptor.dart';
 import 'package:bzy_network_framework/src/core/interceptor/http_status_interceptor.dart';
 import 'package:bzy_network_framework/src/core/interceptor/logging_interceptor.dart';
 import 'package:bzy_network_framework/src/core/interceptor/retry_interceptor.dart';
@@ -601,3 +600,4 @@ class MockRequestInterceptorHandler extends RequestInterceptorHandler {
     // 模拟拒绝请求
   }
 }
+

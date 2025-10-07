@@ -27,23 +27,11 @@ class TimeoutInterceptorConfig {
   /// 基础发送超时时间（毫秒）
   final int baseSendTimeout;
   
-  /// 超时重试次数
-  final int timeoutRetryCount;
-  
-  /// 超时重试间隔（毫秒）
-  final int timeoutRetryDelay;
-  
-  /// 是否启用指数退避重试
-  final bool enableExponentialBackoff;
-  
   /// 最大超时时间（毫秒）
   final int maxTimeout;
   
   /// 最小超时时间（毫秒）
   final int minTimeout;
-  
-  /// 超时错误处理策略
-  final TimeoutErrorStrategy errorStrategy;
 
   const TimeoutInterceptorConfig({
     this.enabled = true,
@@ -52,28 +40,13 @@ class TimeoutInterceptorConfig {
     this.baseConnectTimeout = 15000,
     this.baseReceiveTimeout = 30000,
     this.baseSendTimeout = 30000,
-    this.timeoutRetryCount = 2,
-    this.timeoutRetryDelay = 1000,
-    this.enableExponentialBackoff = true,
     this.maxTimeout = 120000,
     this.minTimeout = 3000,
-    this.errorStrategy = TimeoutErrorStrategy.retryWithBackoff,
   });
 }
 
-/// 超时错误处理策略
-enum TimeoutErrorStrategy {
-  /// 立即失败
-  failImmediately,
-  /// 重试
-  retry,
-  /// 带退避的重试
-  retryWithBackoff,
-  /// 调整超时后重试
-  adjustTimeoutAndRetry,
-}
-
 /// 连接超时拦截器
+/// 专注于动态超时调整和网络质量检测，不包含重试逻辑
 class TimeoutInterceptor extends PluginInterceptor {
   final TimeoutInterceptorConfig _config;
   final Logger _logger = Logger('TimeoutInterceptor');
@@ -99,7 +72,7 @@ class TimeoutInterceptor extends PluginInterceptor {
   String get version => '1.0.0';
 
   @override
-  String get description => '连接超时拦截器';
+  String get description => '连接超时拦截器 - 专注于动态超时调整和网络质量检测';
 
   @override
   bool get supportsRequestInterception => true;
@@ -144,21 +117,14 @@ class TimeoutInterceptor extends PluginInterceptor {
     }
 
     try {
-      // 检查是否为超时错误
+      // 检查是否为超时错误并记录统计
       if (_isTimeoutError(err)) {
         _logger.warning('Timeout error detected: ${err.message}');
         
         final url = err.requestOptions.uri.toString();
         _recordTimeout(url);
         
-        // 根据策略处理超时错误
-        final shouldRetry = await _handleTimeoutError(err);
-        
-        if (shouldRetry) {
-          _logger.info('Retrying request after timeout');
-          // 这里不直接重试，而是让重试拦截器处理
-          return;
-        }
+        _logger.info('Timeout recorded for URL: $url, Total timeouts: ${_timeoutCounts[url]}');
       }
     } catch (e) {
       _logger.severe('Error handling timeout: $e');
@@ -219,60 +185,6 @@ class TimeoutInterceptor extends PluginInterceptor {
     _lastTimeoutTime[url] = DateTime.now();
   }
 
-  /// 处理超时错误
-  Future<bool> _handleTimeoutError(DioException err) async {
-    final url = err.requestOptions.uri.toString();
-    final timeoutCount = _timeoutCounts[url] ?? 0;
-    
-    switch (_config.errorStrategy) {
-      case TimeoutErrorStrategy.failImmediately:
-        return false;
-        
-      case TimeoutErrorStrategy.retry:
-        return timeoutCount < _config.timeoutRetryCount;
-        
-      case TimeoutErrorStrategy.retryWithBackoff:
-        if (timeoutCount < _config.timeoutRetryCount) {
-          final delay = _calculateBackoffDelay(timeoutCount);
-          _logger.info('Waiting ${delay}ms before retry');
-          await Future.delayed(Duration(milliseconds: delay));
-          return true;
-        }
-        return false;
-        
-      case TimeoutErrorStrategy.adjustTimeoutAndRetry:
-        if (timeoutCount < _config.timeoutRetryCount) {
-          // 增加超时时间
-          final newTimeout = _calculateAdjustedTimeout(err.requestOptions, timeoutCount);
-          err.requestOptions.connectTimeout = newTimeout;
-          err.requestOptions.receiveTimeout = Duration(milliseconds: newTimeout.inMilliseconds * 2);
-          
-          _logger.info('Adjusted timeout to ${newTimeout.inMilliseconds}ms for retry');
-          return true;
-        }
-        return false;
-    }
-  }
-
-  /// 计算退避延迟
-  int _calculateBackoffDelay(int retryCount) {
-    if (!_config.enableExponentialBackoff) {
-      return _config.timeoutRetryDelay;
-    }
-    
-    // 指数退避：delay * (2^retryCount)
-    final delay = _config.timeoutRetryDelay * (1 << retryCount);
-    return delay.clamp(_config.timeoutRetryDelay, 30000); // 最大30秒
-  }
-
-  /// 计算调整后的超时时间
-  Duration _calculateAdjustedTimeout(RequestOptions options, int timeoutCount) {
-    final currentTimeout = options.connectTimeout?.inMilliseconds ?? _config.baseConnectTimeout;
-    final adjustedTimeout = (currentTimeout * (1.5 + timeoutCount * 0.5)).round();
-    
-    return Duration(milliseconds: adjustedTimeout.clamp(_config.minTimeout, _config.maxTimeout));
-  }
-
   /// 获取超时统计信息
   Map<String, dynamic> getTimeoutStatistics() {
     return {
@@ -293,5 +205,29 @@ class TimeoutInterceptor extends PluginInterceptor {
   void resetTimeoutCount(String url) {
     _timeoutCounts.remove(url);
     _lastTimeoutTime.remove(url);
+  }
+
+  /// 根据历史超时情况调整超时时间
+  Duration getAdjustedTimeout(String url) {
+    final timeoutCount = _timeoutCounts[url] ?? 0;
+    if (timeoutCount == 0) {
+      return Duration(milliseconds: _config.baseConnectTimeout);
+    }
+    
+    // 根据超时次数适当增加超时时间
+    final adjustedTimeout = (_config.baseConnectTimeout * (1 + timeoutCount * 0.2)).round();
+    return Duration(milliseconds: adjustedTimeout.clamp(_config.minTimeout, _config.maxTimeout));
+  }
+
+  /// 检查URL是否频繁超时
+  bool isFrequentlyTimingOut(String url, {int threshold = 3}) {
+    final timeoutCount = _timeoutCounts[url] ?? 0;
+    final lastTimeout = _lastTimeoutTime[url];
+    
+    if (lastTimeout == null) return false;
+    
+    // 如果最近5分钟内超时次数超过阈值，认为是频繁超时
+    final recentTimeouts = DateTime.now().difference(lastTimeout).inMinutes < 5;
+    return recentTimeouts && timeoutCount >= threshold;
   }
 }

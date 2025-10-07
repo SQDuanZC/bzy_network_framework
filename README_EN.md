@@ -5,11 +5,11 @@ English | [中文](README.md)
 [![pub package](https://img.shields.io/pub/v/bzy_network_framework.svg)](https://pub.dev/packages/bzy_network_framework)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev/)
-[![Version](https://img.shields.io/badge/Version-v1.1.0-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
+[![Version](https://img.shields.io/badge/Version-v1.1.1-green.svg)](https://github.com/SQDuanZC/bzy_network_framework)
 
 **BZY Network Framework** is a high-performance, easily extensible Flutter network request solution that provides comprehensive network requests, caching, interceptors, monitoring, and other features.
 
-## 🆕 Latest Updates (v1.1.0)
+## Latest Updates (v1.1.1)
 
 - 🏗️ **Interceptor Architecture Refactoring**: Completed modular refactoring of the interceptor system, migrating core interceptors to independent files
 - 📦 **Modular Design**: Migrated `LoggingInterceptor`, `RetryInterceptor`, `PerformanceInterceptor` to independent files for improved maintainability
@@ -17,6 +17,12 @@ English | [中文](README.md)
 - 🗑️ **Framework Simplification**: Removed less-used `CacheInterceptor` and `AuthInterceptor` to simplify framework structure
 - 🔄 **Backward Compatibility**: Maintained backward compatibility with no changes required to existing APIs
 - 🧪 **Test Updates**: Updated test suite to adapt to new interceptor architecture, ensuring functional stability
+
+### 🚀 New versionBased Strategy Features
+- **Intelligent Version Control**: Automatic version comparison and upgrade management for interceptors
+- **Dynamic Hot Updates**: Runtime interceptor updates without app restart, perfect for emergency fixes
+- **Version Security Control**: Prevents downgrade attacks and ensures only newer versions can replace existing ones
+- **Version Tracking & Monitoring**: Complete version history tracking with detailed logging and monitoring
 
 ### v1.0.9 Updates
 
@@ -98,6 +104,10 @@ English | [中文](README.md)
 - 🔐 **Secure & Reliable**: Support for certificate pinning and request signing
 - 🔍 **Comprehensive Error Handling**: Unified error handling with custom error handling for different HTTP status codes
 - 📝 **Detailed Logging**: Enhanced logging system with request/response details and performance metrics
+- 🎯 **Intelligent Version Control**: Smart version-based interceptor management with automatic upgrade capabilities
+- 🔄 **Dynamic Hot Updates**: Runtime interceptor updates without app restart for emergency fixes and feature rollouts
+- 📋 **Multi-Strategy Registration**: Support for multiple registration strategies (replace, versionBased, append)
+- 📊 **Version Tracking**: Complete version history tracking with detailed monitoring and rollback capabilities
 
 ## 🚀 Quick Start
 
@@ -434,6 +444,135 @@ final responses = await UnifiedNetworkFramework.instance.executeBatch(
 // Process results
 final successCount = responses.where((r) => r.isSuccess).length;
 print('Successful requests: $successCount/${responses.length}');
+```
+
+### versionBased Strategy - Intelligent Version Control
+
+```dart
+// 1. Create versioned interceptor
+class TokenInterceptorV1 extends PluginInterceptor {
+  @override
+  String get name => 'token_interceptor';
+  
+  @override
+  String get version => '1.0.0';
+  
+  @override
+  String get description => 'Token Interceptor v1.0.0';
+  
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    // Basic token handling
+    final token = getStoredToken();
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+}
+
+// 2. Register initial version
+final manager = InterceptorManager.instance;
+bool success = manager.registerInterceptorSmart(
+  'token_interceptor',
+  TokenInterceptorV1(),
+  strategy: InterceptorRegistrationStrategy.versionBased,
+);
+
+// 3. Upgrade to new version (with token refresh support)
+class TokenInterceptorV2 extends PluginInterceptor {
+  @override
+  String get name => 'token_interceptor';
+  
+  @override
+  String get version => '2.0.0';  // Higher version
+  
+  @override
+  String get description => 'Token Interceptor v2.0.0 - Auto refresh support';
+  
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final token = getStoredToken();
+    if (token != null) {
+      if (isTokenExpired(token)) {
+        // New feature: Auto token refresh
+        refreshToken().then((newToken) => {
+          options.headers['Authorization'] = 'Bearer $newToken'
+        });
+      } else {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
+    }
+    handler.next(options);
+  }
+}
+
+// 4. Auto upgrade (system will automatically replace with v2.0.0)
+bool upgraded = manager.registerInterceptorSmart(
+  'token_interceptor',
+  TokenInterceptorV2(),
+  strategy: InterceptorRegistrationStrategy.versionBased,
+);
+
+// 5. Downgrade attempt will be rejected
+class TokenInterceptorV1_5 extends PluginInterceptor {
+  @override
+  String get version => '1.5.0';  // Lower than current version 2.0.0
+  // ...
+}
+
+// This registration will fail due to lower version
+bool downgrade = manager.registerInterceptorSmart(
+  'token_interceptor',
+  TokenInterceptorV1_5(),
+  strategy: InterceptorRegistrationStrategy.versionBased,
+);
+print('Downgrade result: ${downgrade ? "Success" : "Rejected"}'); // Output: Rejected
+```
+
+### Dynamic Hot Update Scenarios
+
+```dart
+// Scenario: Emergency payment security fix
+class PaymentSecurityInterceptor extends PluginInterceptor {
+  @override
+  String get name => 'payment_security';
+  
+  @override
+  String get version => '1.0.1';  // Emergency fix version
+  
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (options.path.contains('/payment')) {
+      // Emergency security fix: Add extra validation
+      options.headers['X-Security-Check'] = generateSecurityHash();
+      options.headers['X-Timestamp'] = DateTime.now().millisecondsSinceEpoch.toString();
+    }
+    handler.next(options);
+  }
+}
+
+// Runtime dynamic deployment, takes effect immediately
+manager.registerInterceptorSmart(
+  'payment_security',
+  PaymentSecurityInterceptor(),
+  strategy: InterceptorRegistrationStrategy.versionBased,
+);
+```
+
+### Multi-Module Version Collaboration
+
+```dart
+// Module A registers basic functionality v1.0.0
+moduleA.registerInterceptor('logging', LoggingInterceptorV1());
+
+// Module B attempts to register enhanced functionality v1.2.0 (Success, higher version)
+moduleB.registerInterceptor('logging', LoggingInterceptorV1_2());
+
+// Module C attempts to register old version v1.1.0 (Fail, lower version)
+moduleC.registerInterceptor('logging', LoggingInterceptorV1_1());
+
+// Finally uses Module B's v1.2.0 version
 ```
 
 ### Custom Interceptors

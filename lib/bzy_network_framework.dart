@@ -49,7 +49,7 @@ export 'src/metrics/metrics.dart';
 export 'package:dio/dio.dart' show Dio, Response, RequestOptions, DioException, Interceptor, ErrorInterceptorHandler;
 
 /// BZY 网络框架版本信息
-const String bzyNetworkFrameworkVersion = '1.1.0';
+const String bzyNetworkFrameworkVersion = '1.1.1';
 
 
 /// BZY 网络框架名称
